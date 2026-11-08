@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class IAMP_DB {
 
-	const VERSION = '1.0.0';
+	const VERSION = '1.1.0';
 
 	public static function table( $name ) {
 		global $wpdb;
@@ -28,6 +28,8 @@ class IAMP_DB {
 			courses TEXT NULL,
 			groups_ids TEXT NULL,
 			duration_days INT UNSIGNED NOT NULL DEFAULT 0,
+			commission_pct DECIMAL(5,2) NOT NULL DEFAULT 15.00,
+			price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
 			product_ids TEXT NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'active',
 			created_at DATETIME NOT NULL,
@@ -84,6 +86,51 @@ class IAMP_DB {
 			KEY action (action)
 		) $charset;" );
 
+		$s  = self::table( 'sales' );
+		$po = self::table( 'payouts' );
+		dbDelta( "CREATE TABLE $s (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			created_at DATETIME NOT NULL,
+			trainer_id BIGINT UNSIGNED NOT NULL,
+			client_name VARCHAR(190) NOT NULL,
+			client_email VARCHAR(190) NOT NULL,
+			client_phone VARCHAR(60) NULL,
+			package_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			extra_courses TEXT NULL,
+			amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+			currency VARCHAR(10) NOT NULL DEFAULT 'EUR',
+			payment_method VARCHAR(60) NULL,
+			payment_ref VARCHAR(190) NULL,
+			payment_date DATE NULL,
+			proof_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			collected_by_trainer TINYINT(1) NOT NULL DEFAULT 0,
+			commission_pct DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+			commission DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+			status VARCHAR(20) NOT NULL DEFAULT 'pending',
+			membership_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			note TEXT NULL,
+			admin_note TEXT NULL,
+			decided_at DATETIME NULL,
+			decided_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			PRIMARY KEY  (id),
+			KEY trainer_id (trainer_id),
+			KEY status (status)
+		) $charset;" );
+
+		dbDelta( "CREATE TABLE $po (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			trainer_id BIGINT UNSIGNED NOT NULL,
+			amount DECIMAL(10,2) NOT NULL,
+			paid_on DATE NOT NULL,
+			method VARCHAR(60) NULL,
+			note TEXT NULL,
+			kind VARCHAR(20) NOT NULL DEFAULT 'payout',
+			created_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY trainer_id (trainer_id)
+		) $charset;" );
+
 		update_option( 'iamp_db_version', self::VERSION );
 	}
 
@@ -132,6 +179,8 @@ class IAMP_DB {
 			'courses'       => self::ids_to_string( $data['courses'] ),
 			'groups_ids'    => self::ids_to_string( $data['groups'] ),
 			'duration_days' => absint( $data['duration_days'] ),
+			'commission_pct'=> isset( $data['commission_pct'] ) ? (float) $data['commission_pct'] : 15,
+			'price'         => isset( $data['price'] ) ? (float) $data['price'] : 0,
 			'product_ids'   => $data['product_ids'],
 			'status'        => $data['status'],
 		);

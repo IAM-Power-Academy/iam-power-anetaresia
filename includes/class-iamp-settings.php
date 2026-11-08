@@ -31,6 +31,10 @@ class IAMP_Settings {
 			'disable_xmlrpc'       => 0,
 			'github_token'         => '',
 			'auto_update'          => 1,
+			'vat_pct'              => 18,
+			'notify_email'         => '',
+			'sheet_url'            => '',
+			'sheet_secret'         => '',
 		);
 	}
 
@@ -40,6 +44,9 @@ class IAMP_Settings {
 			$opts = array();
 		}
 		$merged = wp_parse_args( $opts, self::defaults() );
+		if ( empty( $merged['sheet_secret'] ) ) {
+			$merged['sheet_secret'] = wp_generate_password( 24, false, false );
+		}
 		if ( empty( $merged['webhook_key'] ) ) {
 			$merged['webhook_key'] = wp_generate_password( 32, false, false );
 		}

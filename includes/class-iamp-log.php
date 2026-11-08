@@ -64,6 +64,11 @@ class IAMP_Log {
 			'webhook_error'   => 'Webhook — gabim',
 			'security'        => 'Siguria',
 			'settings'        => 'Cilësime',
+			'sale_new'        => 'Shitje e re',
+			'sale_ok'         => 'Shitje e konfirmuar',
+			'sale_no'         => 'Shitje e refuzuar',
+			'payout'          => 'Pagesë bonusi',
+			'team'            => 'Skuadra',
 		);
 		return isset( $labels[ $action ] ) ? $labels[ $action ] : $action;
 	}

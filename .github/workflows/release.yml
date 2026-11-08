@@ -35,7 +35,7 @@ jobs:
       - name: Ndërto ZIP-in
         run: |
           mkdir -p build/iam-power-anetaresia
-          rsync -a --exclude '.git' --exclude '.github' --exclude 'build' --exclude 'README.md' --exclude '.gitignore' ./ build/iam-power-anetaresia/
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'build' --exclude 'README.md' --exclude '.gitignore' --exclude 'google-apps-script' ./ build/iam-power-anetaresia/
           cd build && zip -rq ../iam-power-anetaresia.zip iam-power-anetaresia
 
       - name: Bashkëngjit ZIP-in te Release

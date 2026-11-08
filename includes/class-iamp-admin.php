@@ -350,6 +350,8 @@ class IAMP_Admin {
 					<tr><th>Emri *</th><td><input type="text" name="name" required class="iamp-wide" value="<?php echo esc_attr( $edit ? $edit->name : '' ); ?>" placeholder="p.sh. 40 Ditë Çlirim Shpirtëror"></td></tr>
 					<tr><th>Kurset</th><td><?php self::course_picker( 'courses', $edit ? IAMP_DB::string_to_ids( $edit->courses ) : array() ); ?></td></tr>
 					<tr><th>Grupet</th><td><?php self::course_picker( 'groups', $edit ? IAMP_DB::string_to_ids( $edit->groups_ids ) : array(), 'groups' ); ?></td></tr>
+					<tr><th>Çmimi (€)</th><td><input type="number" step="0.01" min="0" name="price" value="<?php echo esc_attr( $edit ? $edit->price : '' ); ?>"></td></tr>
+					<tr><th>Bonusi i trajnerit (%)</th><td><input type="number" step="0.5" min="0" max="100" name="commission_pct" value="<?php echo esc_attr( $edit ? $edit->commission_pct : 15 ); ?>"> <span class="description">Seminar/webinar 15 · Trajnim me Mimozën/Avniun 10 · Trajnime online 25 · Trajnim me trajner motivues 50 · Libra 10 · Paketa 1 10 · Arkitekti 5 · Donacion 0</span></td></tr>
 					<tr><th>Kohëzgjatja (ditë)</th><td><input type="number" min="0" name="duration_days" value="<?php echo esc_attr( $edit ? $edit->duration_days : 0 ); ?>"> <span class="description">0 = pa afat. P.sh. 40 për masterclass-in, 365 për VIP.</span></td></tr>
 					<tr><th>ID-të e produkteve</th><td><input type="text" name="product_ids" class="iamp-wide" value="<?php echo esc_attr( $edit ? $edit->product_ids : '' ); ?>" placeholder="p.sh. 512345, VIP Member, iam-vip"><p class="description">Të ndara me presje. ID e produktit në Digistore24, emri i nivelit (tier) në Ko-fi, ose çdo emër/ID që dërgon platforma. Lidh pagesën me këtë paketë.</p></td></tr>
 					<tr><th>Statusi</th><td><select name="status"><option value="active" <?php selected( $edit ? $edit->status : 'active', 'active' ); ?>>Aktive</option><option value="inactive" <?php selected( $edit ? $edit->status : '', 'inactive' ); ?>>Joaktive</option></select></td></tr>
@@ -365,10 +367,11 @@ class IAMP_Admin {
 				if ( ! $pkgs ) {
 					echo '<p>Ende nuk ka paketa. Krijo të parën — p.sh. “40 Ditë Çlirim Shpirtëror” me 40 ditë, ose “VIP” me 365 ditë.</p>';
 				} else {
-					echo '<table class="widefat striped"><thead><tr><th>Emri</th><th>Kurset</th><th>Afati</th><th>Produktet</th><th></th></tr></thead><tbody>';
+					echo '<table class="widefat striped"><thead><tr><th>Emri</th><th>Kurset</th><th>Çmimi</th><th>Bonusi</th><th>Afati</th><th>Produktet</th><th></th></tr></thead><tbody>';
 					foreach ( $pkgs as $p ) {
 						echo '<tr><td><strong>' . esc_html( $p->name ) . '</strong> <small>#' . (int) $p->id . ( 'active' !== $p->status ? ' (joaktive)' : '' ) . '</small></td>';
 						echo '<td><small>' . esc_html( self::titles( $p->courses ) ) . '</small></td>';
+						echo '<td>' . ( (float) $p->price > 0 ? '€' . esc_html( number_format( (float) $p->price, 2 ) ) : '—' ) . '</td><td>' . esc_html( rtrim( rtrim( (string) $p->commission_pct, '0' ), '.' ) ) . '%</td>';
 						echo '<td>' . ( $p->duration_days ? (int) $p->duration_days . ' ditë' : 'Pa afat' ) . '</td>';
 						echo '<td><small>' . esc_html( $p->product_ids ) . '</small></td>';
 						echo '<td><a class="button button-small" href="' . esc_url( admin_url( 'admin.php?page=iamp-packages&edit=' . $p->id ) ) . '">Ndrysho</a> ';
@@ -905,6 +908,8 @@ class IAMP_Admin {
 				'courses'       => (array) self::post( 'courses', array() ),
 				'groups'        => (array) self::post( 'groups', array() ),
 				'duration_days' => absint( self::post( 'duration_days', 0 ) ),
+				'price'         => (float) str_replace( ',', '.', self::post( 'price', 0 ) ),
+				'commission_pct'=> (float) str_replace( ',', '.', self::post( 'commission_pct', 15 ) ),
 				'product_ids'   => $products,
 				'status'        => 'inactive' === self::post( 'status' ) ? 'inactive' : 'active',
 			),
