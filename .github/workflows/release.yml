@@ -1,8 +1,11 @@
 name: Publiko versionin
 
-# Krijon automatikisht një version (Release) me ZIP-in e plugin-it
-# sa herë që shtyhet një etiketë si v1.2.0.
+# Ndërton ZIP-in e plugin-it dhe e bashkëngjit te versioni (Release),
+# sa herë që publikohet një Release i ri në GitHub (p.sh. v1.2.0),
+# ose kur shtyhet një etiketë v*.
 on:
+  release:
+    types: [published]
   push:
     tags:
       - 'v*'
@@ -35,10 +38,14 @@ jobs:
           rsync -a --exclude '.git' --exclude '.github' --exclude 'build' --exclude 'README.md' --exclude '.gitignore' ./ build/iam-power-anetaresia/
           cd build && zip -rq ../iam-power-anetaresia.zip iam-power-anetaresia
 
-      - name: Krijo Release
+      - name: Bashkëngjit ZIP-in te Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" iam-power-anetaresia.zip \
-            --title "IAM Power Anëtarësia $GITHUB_REF_NAME" \
-            --notes-file <(git log -1 --pretty=%B)
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" iam-power-anetaresia.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" iam-power-anetaresia.zip \
+              --title "IAM Power Anëtarësia $GITHUB_REF_NAME" \
+              --notes "Version i ri i plugin-it."
+          fi
