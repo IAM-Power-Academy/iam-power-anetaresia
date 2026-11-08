@@ -327,6 +327,9 @@ class IAMP_Team_Front {
 		$labels = array( 'pending' => 'Pret konfirmim', 'approved' => 'Aktivizuar', 'rejected' => 'Refuzuar' );
 		ob_start();
 		echo self::css(); // phpcs:ignore
+		if ( class_exists( 'IAMP_Admin_Stats' ) ) {
+			echo IAMP_Admin_Stats::front_block(); // phpcs:ignore -- vetëm për administratoren.
+		}
 		?>
 		<div class="iamt">
 			<?php if ( current_user_can( 'manage_options' ) ) : ?>

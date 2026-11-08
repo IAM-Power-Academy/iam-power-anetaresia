@@ -135,8 +135,21 @@ class IAMP_Admin_Stats {
 
 	/* ---------------- Faqja ---------------- */
 
-	public static function page() {
+	/** Blloku i shitjeve brenda "Paneli im" në kursin e Skuadrës: shfaqet vetëm për administratoren. */
+	public static function front_block() {
 		if ( ! current_user_can( 'manage_options' ) ) {
+			return '';
+		}
+		ob_start();
+		self::page( true );
+		return ob_get_clean();
+	}
+
+	public static function page( $front = false ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			if ( $front ) {
+				return;
+			}
 			wp_die( 'Nuk ke leje.' );
 		}
 		$h     = self::history();
@@ -144,8 +157,12 @@ class IAMP_Admin_Stats {
 		$now_y = (int) current_time( 'Y' );
 		$now_m = (int) current_time( 'n' );
 
-		echo '<div class="wrap iamp-wrap"><div class="iamp-head"><div class="iamp-logo">IAM POWER</div><div><h1>Paneli i shitjeve</h1><p>Vetëm për ty. Skuadra nuk e sheh këtë faqe.</p></div></div>';
-		self::styles();
+		if ( $front ) {
+			echo '<div class="iamp-sp"><h2 class="iamp-sp-title">📊 Paneli i shitjeve <small>(e sheh vetëm Mimoza)</small></h2>';
+		} else {
+			echo '<div class="wrap iamp-wrap"><div class="iamp-head"><div class="iamp-logo">IAM POWER</div><div><h1>Paneli i shitjeve</h1><p>Vetëm për ty. Skuadra nuk e sheh këtë faqe.</p></div></div>';
+		}
+		self::styles( $front );
 
 		// Linqet.
 		echo '<div class="iamp-stats-links">';
@@ -157,7 +174,9 @@ class IAMP_Admin_Stats {
 
 		if ( ! $years ) {
 			echo '<div class="iamp-card"><p>Nuk ka ende të dhëna shitjesh. Shto historikun më poshtë te “Cilësimet e panelit”.</p></div>';
-			self::settings_form( $h );
+			if ( ! $front ) {
+				self::settings_form( $h );
+			}
 			echo '</div>';
 			return;
 		}
@@ -245,7 +264,11 @@ class IAMP_Admin_Stats {
 		}
 		echo '</p></div>';
 
-		self::settings_form( $h );
+		if ( $front ) {
+			echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=iamp-stats' ) ) . '">Cilësimet e panelit në WordPress →</a></p>';
+		} else {
+			self::settings_form( $h );
+		}
 		echo '</div>';
 	}
 
@@ -437,7 +460,25 @@ class IAMP_Admin_Stats {
 		return $o . '</svg>';
 	}
 
-	private static function styles() {
+	private static function styles( $front = false ) {
+		if ( $front ) {
+			?>
+			<style>
+				.iamp-sp{margin:0 0 40px;padding:20px;background:#f6f3ea;border:2px solid #c9a14a;border-radius:14px;color:#1f2937}
+				.iamp-sp-title{margin:0 0 6px}.iamp-sp-title small{font-size:14px;font-weight:400;color:#8a6a1f}
+				.iamp-sp .iamp-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:12px 0}
+				.iamp-sp .iamp-stats>div{background:#fff;border:1px solid #e2dccd;border-left:4px solid #c9a14a;border-radius:10px;padding:12px 14px}
+				.iamp-sp .iamp-stats strong{display:block;font-size:24px;color:#0b1a33;line-height:1.15}
+				.iamp-sp .iamp-stats span{color:#555;font-size:13px}
+				.iamp-sp .iamp-card{background:#fff;border:1px solid #e2dccd;border-radius:12px;padding:16px;margin:12px 0}
+				.iamp-sp .iamp-card h2{font-size:18px;margin:0 0 6px}
+				.iamp-sp .iamp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+				.iamp-sp .description{color:#666;font-size:13px}
+				.iamp-sp .button{display:inline-block;background:#0b1a33;color:#fff !important;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600}
+				.iamp-sp table{border-collapse:collapse;width:100%;font-size:13px}.iamp-sp table th,.iamp-sp table td{padding:6px 8px;border-bottom:1px solid #eee}
+			</style>
+			<?php
+		}
 		?>
 		<style>
 			.iamp-stats-links{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
