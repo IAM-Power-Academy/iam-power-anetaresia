@@ -134,6 +134,9 @@ class IAMP_Team_Front {
 .iamt td{padding:9px 10px;border-bottom:1px solid #eee6d6;vertical-align:top}
 .iamt tr:nth-child(even) td{background:#faf8f3}
 .iamt-b{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
+.iamt-switch{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;font-weight:600;color:#6b7280}
+.iamt-switch a{padding:8px 16px;border-radius:20px;background:#fbf6ea;color:#0b1a33;text-decoration:none;border:1px solid #e6dfcf}
+.iamt-switch a.on{background:#0b1a33;color:#fff;border-color:#0b1a33}
 .iamt-b.pending{background:#ffe9c7;color:#9a5b00}.iamt-b.approved{background:#ddf3e4;color:#1d6b35}.iamt-b.rejected{background:#fde3e3;color:#9b1c1c}
 @media(max-width:700px){.iamt-grid,.iamt-kpis{grid-template-columns:1fr 1fr}.iamt td,.iamt th{font-size:12px;padding:7px}}
 </style>';
@@ -211,7 +214,9 @@ class IAMP_Team_Front {
 			set_transient( 'iamp_sale_msg_' . get_current_user_id(), array( 'err', $res->get_error_message() ), 120 );
 		} else {
 			set_transient( 'iamp_sale_msg_' . get_current_user_id(), array( 'ok', 'Shitja u regjistrua. Klienti aktivizohet sapo Mimoza ta konfirmojë.' ), 120 );
-			wp_safe_redirect( add_query_arg( 'u', $res, wp_get_referer() ? wp_get_referer() : home_url( '/' ) ) );
+			$back = $p( 'iamp_return' );
+			$back = $back ? $back : ( wp_get_referer() ? wp_get_referer() : home_url( '/' ) );
+			wp_safe_redirect( add_query_arg( 'u', $res, $back ) );
 			exit;
 		}
 	}
@@ -241,6 +246,7 @@ class IAMP_Team_Front {
 			<?php echo self::message(); // phpcs:ignore ?>
 			<form class="iamt-card" method="post" enctype="multipart/form-data">
 				<?php wp_nonce_field( 'iamp_sale', 'iamp_sale_nonce' ); ?>
+				<input type="hidden" name="iamp_return" value="<?php echo esc_url( get_permalink() ); ?>">
 				<?php if ( current_user_can( 'manage_options' ) ) : ?>
 					<label>Trajneri</label>
 					<select name="iamp_trainer"><option value="">Unë</option>
@@ -303,8 +309,13 @@ class IAMP_Team_Front {
 			return self::css() . $g;
 		}
 		$uid = get_current_user_id();
-		if ( current_user_can( 'manage_options' ) && ! empty( $_GET['trajneri'] ) ) { // phpcs:ignore
-			$uid = absint( $_GET['trajneri'] ); // phpcs:ignore
+		if ( current_user_can( 'manage_options' ) ) {
+			if ( ! empty( $_GET['trajneri'] ) ) { // phpcs:ignore
+				$uid = absint( $_GET['trajneri'] ); // phpcs:ignore
+			} elseif ( ! IAMP_Sales::is_team( $uid ) ) {
+				$ids = array_keys( IAMP_Sales::team() );
+				$uid = $ids ? (int) $ids[0] : $uid;
+			}
 		}
 		$sum   = IAMP_Sales::summary( $uid );
 		$sales = IAMP_Sales::query( array( 'trainer_id' => $uid, 'limit' => 300 ) );
@@ -318,6 +329,13 @@ class IAMP_Team_Front {
 		echo self::css(); // phpcs:ignore
 		?>
 		<div class="iamt">
+			<?php if ( current_user_can( 'manage_options' ) ) : ?>
+				<div class="iamt-switch"><span>Shiko panelin e:</span>
+					<?php foreach ( IAMP_Sales::team() as $tid => $tname ) : ?>
+						<a class="<?php echo (int) $tid === (int) $uid ? 'on' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'trajneri', (int) $tid, get_permalink() ) ); ?>"><?php echo esc_html( $tname ); ?></a>
+					<?php endforeach; ?>
+				</div>
+			<?php endif; ?>
 			<div class="iamt-head"><h2>Paneli im — <?php echo esc_html( IAMP_Sales::trainer_name( $uid ) ); ?></h2><p>Shitjet dhe bonuset e tua. I sheh vetëm ti dhe Mimoza.</p></div>
 			<div class="iamt-kpis">
 				<div class="iamt-kpi"><span>Shitje këtë muaj</span><strong><?php echo (int) $sum['month_n']; ?></strong></div>

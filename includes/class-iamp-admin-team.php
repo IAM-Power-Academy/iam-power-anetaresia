@@ -273,7 +273,9 @@ class IAMP_Admin_Team {
 					$tot[ $k ] += $m[ $k ];
 				}
 				$u = get_userdata( $uid );
-				echo '<tr><td><strong>' . esc_html( $name ) . '</strong><br><small>' . esc_html( $u ? $u->user_email : '' ) . '</small><br><a href="' . esc_url( self::url( 'iamp_team_remove', array( 'uid' => $uid ) ) ) . '" onclick="return confirm(\'Ta heq nga Skuadra?\')" class="iamp-danger" style="font-size:11px">hiq</a></td>';
+				$ids   = (array) get_option( 'iamp_team_lessons', array() );
+				$panel = ! empty( $ids[1] ) ? add_query_arg( 'trajneri', $uid, get_permalink( $ids[1] ) ) : '';
+				echo '<tr><td><strong>' . esc_html( $name ) . '</strong><br><small>' . esc_html( $u ? $u->user_email : '' ) . '</small><br>' . ( $panel ? '<a href="' . esc_url( $panel ) . '" target="_blank" class="button button-small">Shiko panelin</a> ' : '' ) . '<a href="' . esc_url( self::url( 'iamp_team_remove', array( 'uid' => $uid ) ) ) . '" onclick="return confirm(\'Ta heq nga Skuadra?\')" class="iamp-danger" style="font-size:11px">hiq</a></td>';
 				echo '<td>' . (int) $m['month_n'] . ' · ' . esc_html( self::eur( $m['month_sold'] ) ) . '</td><td>' . (int) $m['count'] . ' · ' . esc_html( self::eur( $m['sold'] ) ) . '</td>';
 				echo '<td>' . esc_html( self::eur( $m['opening'] ) ) . '</td><td>' . esc_html( self::eur( $m['earned'] ) ) . '</td><td>' . esc_html( self::eur( $m['kept'] ) ) . '</td><td>' . esc_html( self::eur( $m['paid'] ) ) . '</td>';
 				echo '<td><strong style="font-size:15px;color:#1d6b35">' . esc_html( self::eur( $m['balance'] ) ) . '</strong></td><td>';
