@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *   "asof": "2026-11-08",
  *   "years": { "2025": { "t": [12 shuma], "p": [12 të paguara], "n": [12 numri] }, ... }
  * }
- * Shitjet e regjistruara në plugin pas datës "asof" shtohen vetë mbi historikun.
+ * Shitjet pas datës "asof" lexohen nga fleta "Shitjet e Skuadrës 2026" dhe shtohen mbi historikun.
  */
 class IAMP_Admin_Stats {
 
@@ -44,7 +44,6 @@ class IAMP_Admin_Stats {
 
 	/** Historiku + shitjet e plugin-it pas datës "asof". */
 	public static function data() {
-		global $wpdb;
 		$h     = self::history();
 		$years = array();
 		foreach ( (array) $h['years'] as $y => $d ) {
@@ -54,18 +53,22 @@ class IAMP_Admin_Stats {
 				'n' => self::twelve( isset( $d['n'] ) ? $d['n'] : array() ),
 			);
 		}
-		$t    = IAMP_DB::table( 'sales' );
-		$from = $h['asof'] ? $h['asof'] . ' 23:59:59' : '1970-01-01 00:00:00';
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT YEAR(created_at) y, MONTH(created_at) m, COUNT(*) n, SUM(amount) s, SUM(CASE WHEN status='approved' THEN amount ELSE 0 END) p FROM $t WHERE status IN ('approved','pending') AND created_at > %s GROUP BY y, m", $from ) ); // phpcs:ignore
-		foreach ( (array) $rows as $r ) {
-			$y = (int) $r->y;
-			$m = (int) $r->m - 1;
+		// Shitjet pas datës "asof" lexohen nga fleta "Shitjet e Skuadrës 2026" (në WordPress nuk ruhen).
+		$from  = $h['asof'] ? $h['asof'] : '1970-01-01';
+		$stats = class_exists( 'IAMP_Sales' ) ? IAMP_Sales::sheet_stats() : array();
+		$days  = isset( $stats['days'] ) ? (array) $stats['days'] : array();
+		foreach ( $days as $day => $r ) {
+			if ( ! preg_match( '/^(\d{4})-(\d{2})-\d{2}$/', $day, $mm ) || $day <= $from ) {
+				continue;
+			}
+			$y = (int) $mm[1];
+			$m = (int) $mm[2] - 1;
 			if ( ! isset( $years[ $y ] ) ) {
 				$years[ $y ] = array( 't' => array_fill( 0, 12, 0 ), 'p' => array_fill( 0, 12, 0 ), 'n' => array_fill( 0, 12, 0 ) );
 			}
-			$years[ $y ]['t'][ $m ] += (float) $r->s;
-			$years[ $y ]['p'][ $m ] += (float) $r->p;
-			$years[ $y ]['n'][ $m ] += (int) $r->n;
+			$years[ $y ]['t'][ $m ] += (float) $r['t'];
+			$years[ $y ]['p'][ $m ] += (float) $r['p'];
+			$years[ $y ]['n'][ $m ] += (int) $r['n'];
 		}
 		ksort( $years );
 		return $years;

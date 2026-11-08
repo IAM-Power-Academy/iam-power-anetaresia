@@ -10,15 +10,12 @@ class IAMP_Admin_Team {
 
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ), 20 );
-		foreach ( array( 'iamp_sale_ok', 'iamp_sale_no', 'iamp_sale_pct', 'iamp_team_add', 'iamp_team_remove', 'iamp_payout_add', 'iamp_payout_del', 'iamp_team_course', 'iamp_team_save' ) as $a ) {
+		foreach ( array( 'iamp_sheet_import', 'iamp_sheet_test', 'iamp_team_add', 'iamp_team_remove', 'iamp_payout_add', 'iamp_payout_del', 'iamp_team_course', 'iamp_team_save' ) as $a ) {
 			add_action( 'admin_post_' . $a, array( __CLASS__, 'dispatch' ) );
 		}
 	}
 
 	public static function menu() {
-		$n     = IAMP_Sales::pending_count();
-		$badge = $n ? ' <span class="awaiting-mod">' . (int) $n . '</span>' : '';
-		add_submenu_page( 'iamp', 'Shitjet e Skuadrës', 'Shitjet e Skuadrës' . $badge, 'manage_options', 'iamp-sales', array( __CLASS__, 'page_sales' ) );
 		add_submenu_page( 'iamp', 'Skuadra & Bonuset', 'Skuadra & Bonuset', 'manage_options', 'iamp-team', array( __CLASS__, 'page_team' ) );
 	}
 
@@ -48,27 +45,14 @@ class IAMP_Admin_Team {
 		}
 		check_admin_referer( $action );
 		switch ( $action ) {
-			case 'iamp_sale_ok':
-				$ids = array_filter( array_map( 'absint', explode( ',', self::r( 'id' ) ) ) );
-				$ok  = 0;
-				$err = array();
-				foreach ( $ids as $id ) {
-					$r = IAMP_Sales::approve( $id, self::r( 'note' ) );
-					if ( is_wp_error( $r ) ) {
-						$err[] = '#' . $id . ': ' . $r->get_error_message();
-					} else {
-						$ok++;
-					}
-				}
-				self::back( 'iamp-sales', $ok . ' shitje u konfirmuan dhe klientët u aktivizuan.' . ( $err ? '<br>' . esc_html( implode( ' · ', $err ) ) : '' ), $err ? 'warning' : 'success' );
+			case 'iamp_sheet_test':
+				IAMP_Sales::flush_summary();
+				$r = IAMP_Sales::send( array( 'action' => 'summary' ) );
+				self::back( 'iamp-team', is_wp_error( $r ) ? 'Fleta nuk u lidh: ' . esc_html( $r->get_error_message() ) : 'Lidhja me fletën "Shitjet e Skuadrës 2026" funksionon.', is_wp_error( $r ) ? 'error' : 'success' );
 				break;
-			case 'iamp_sale_no':
-				IAMP_Sales::reject( absint( self::r( 'id' ) ), self::r( 'note' ) );
-				self::back( 'iamp-sales', 'Shitja u refuzua.', 'warning' );
-				break;
-			case 'iamp_sale_pct':
-				IAMP_Sales::set_pct( absint( self::r( 'id' ) ), (float) str_replace( ',', '.', self::r( 'pct' ) ) );
-				self::back( 'iamp-sales', 'Përqindja e bonusit u ndryshua.' );
+			case 'iamp_sheet_import':
+				$r = IAMP_Sales::import_old();
+				self::back( 'iamp-team', is_wp_error( $r ) ? 'Kalimi dështoi: ' . esc_html( $r->get_error_message() ) : $r . ' shitje të vjetra u kaluan te fleta.', is_wp_error( $r ) ? 'error' : 'success' );
 				break;
 			case 'iamp_team_add':
 				$r = IAMP_Sales::add_member( self::r( 'user' ), self::r( 'name' ), (float) str_replace( ',', '.', self::r( 'opening' ) ) );
@@ -96,9 +80,10 @@ class IAMP_Admin_Team {
 						'vat_pct'      => (float) str_replace( ',', '.', self::r( 'vat_pct' ) ),
 						'notify_email' => sanitize_email( self::r( 'notify_email' ) ),
 						'sheet_url'    => esc_url_raw( self::r( 'sheet_url' ) ),
-						'sheet_secret' => self::r( 'sheet_secret' ),
+						'sheet_link'   => esc_url_raw( self::r( 'sheet_link' ) ),
 					)
 				);
+				IAMP_Sales::flush_summary();
 				self::back( 'iamp-team', 'Cilësimet u ruajtën.' );
 				break;
 		}
@@ -185,69 +170,112 @@ class IAMP_Admin_Team {
 		echo '<div class="wrap iamp-wrap"><div class="iamp-head"><div class="iamp-logo">IAM POWER</div><div><h1>' . esc_html( $title ) . '</h1><p>' . esc_html( $sub ) . '</p></div></div>';
 	}
 
-	public static function page_sales() {
-		$status = self::r( 'status' );
-		$status = $status ? $status : 'pending';
-		$sales  = IAMP_Sales::query( array( 'status' => 'all' === $status ? '' : $status, 'trainer_id' => absint( self::r( 'trajneri' ) ), 'search' => self::r( 's' ) ) );
-		$pk     = array();
-		foreach ( IAMP_DB::get_packages() as $p ) {
-			$pk[ $p->id ] = $p->name;
+	/* ---------------- Grafikonet ---------------- */
+
+	public static function dashboard() {
+		if ( current_user_can( 'manage_options' ) ) {
+			wp_add_dashboard_widget( 'iamp_team_charts', 'IAM Power — Shitjet e Skuadrës', array( __CLASS__, 'dashboard_widget' ) );
 		}
-		self::head( 'Shitjet e Skuadrës', 'Konfirmo shitjet: klienti aktivizohet me paketën dhe bonuset, dhe bonusi i shkon trajnerit.' );
-		$tabs = array( 'pending' => 'Presin konfirmim (' . IAMP_Sales::pending_count() . ')', 'approved' => 'Të konfirmuara', 'rejected' => 'Të refuzuara', 'all' => 'Të gjitha' );
-		echo '<h2 class="nav-tab-wrapper">';
-		foreach ( $tabs as $k => $l ) {
-			echo '<a class="nav-tab' . ( $k === $status ? ' nav-tab-active' : '' ) . '" href="' . esc_url( admin_url( 'admin.php?page=iamp-sales&status=' . $k ) ) . '">' . esc_html( $l ) . '</a>';
+	}
+
+	public static function dashboard_widget() {
+		self::charts( true );
+	}
+
+	/** Vizatim i thjeshtë me shtylla (SVG), pa skripte të jashtme. */
+	private static function bars( $items, $color = '#c9a14a', $h = 180 ) {
+		if ( ! $items ) {
+			return '<p class="description">Ende pa të dhëna.</p>';
 		}
-		echo '</h2>';
-		if ( 'pending' === $status && $sales ) {
-			$ids = implode( ',', wp_list_pluck( $sales, 'id' ) );
-			echo '<p><a class="button button-primary button-hero" onclick="return confirm(\'Të konfirmohen dhe aktivizohen të gjitha ' . count( $sales ) . ' shitjet?\')" href="' . esc_url( self::url( 'iamp_sale_ok', array( 'id' => $ids ) ) ) . '">✓ Konfirmo të gjitha (' . count( $sales ) . ')</a></p>';
+		$max = 0;
+		foreach ( $items as $it ) {
+			$max = max( $max, (float) $it['v'] );
 		}
-		if ( ! $sales ) {
-			echo '<div class="iamp-card"><p>Asnjë shitje këtu.</p></div></div>';
+		$max = $max > 0 ? $max : 1;
+		$n   = count( $items );
+		$w   = max( 320, $n * 64 );
+		$bw  = ( $w / $n ) * 0.62;
+		$svg = '<svg viewBox="0 0 ' . $w . ' ' . ( $h + 44 ) . '" style="width:100%;height:auto;max-height:' . ( $h + 60 ) . 'px" role="img">';
+		foreach ( $items as $i => $it ) {
+			$bh   = round( ( (float) $it['v'] / $max ) * $h );
+			$x    = ( $w / $n ) * $i + ( ( $w / $n ) - $bw ) / 2;
+			$y    = $h - $bh + 18;
+			$svg .= '<rect x="' . round( $x, 1 ) . '" y="' . $y . '" width="' . round( $bw, 1 ) . '" height="' . max( $bh, 1 ) . '" rx="4" fill="' . esc_attr( $color ) . '"><title>' . esc_html( $it['l'] . ': ' . $it['t'] ) . '</title></rect>';
+			$svg .= '<text x="' . round( $x + $bw / 2, 1 ) . '" y="' . ( $y - 5 ) . '" text-anchor="middle" font-size="11" fill="#0b1a33" font-weight="600">' . esc_html( $it['t'] ) . '</text>';
+			$svg .= '<text x="' . round( $x + $bw / 2, 1 ) . '" y="' . ( $h + 36 ) . '" text-anchor="middle" font-size="11" fill="#6b7280">' . esc_html( $it['l'] ) . '</text>';
+		}
+		return $svg . '<line x1="0" y1="' . ( $h + 18 ) . '" x2="' . $w . '" y2="' . ( $h + 18 ) . '" stroke="#e6dfcf"/></svg>';
+	}
+
+	private static function short_eur( $v ) {
+		$v = (float) $v;
+		return $v >= 1000 ? '€' . number_format( $v / 1000, 1, ',', '.' ) . 'k' : '€' . number_format( $v, 0, ',', '.' );
+	}
+
+	private static function charts( $compact = false ) {
+		$st   = IAMP_Sales::sheet_stats();
+		$link = IAMP_Settings::get( 'sheet_link' );
+		if ( ! IAMP_Sales::sheet_ready() ) {
+			echo '<p>Fleta "Shitjet e Skuadrës 2026" ende nuk është lidhur (shiko Cilësimet te Skuadra & Bonuset).</p>';
 			return;
 		}
-		$labels = array( 'pending' => 'Pret', 'approved' => 'Konfirmuar', 'rejected' => 'Refuzuar' );
-		echo '<table class="widefat striped iamp-table"><thead><tr><th>#</th><th>Data</th><th>Trajneri</th><th>Klienti</th><th>Kursi / bonus shtesë</th><th>Pagesa</th><th>Bonusi i trajnerit</th><th>Statusi</th><th></th></tr></thead><tbody>';
-		foreach ( $sales as $s ) {
-			$extra = array();
-			foreach ( IAMP_DB::string_to_ids( $s->extra_courses ) as $cid ) {
-				$extra[] = get_the_title( $cid );
+		$mon   = array_slice( (array) $st['months'], -12 );
+		$now   = current_time( 'Y-m' );
+		$this_m = array( 'n' => 0, 'sold' => 0, 'bonus' => 0 );
+		foreach ( $mon as $m ) {
+			if ( isset( $m['m'] ) && $m['m'] === $now ) {
+				$this_m = $m;
 			}
-			echo '<tr><td>' . (int) $s->id . '</td><td>' . esc_html( mysql2date( 'd.m.Y H:i', $s->created_at ) ) . '</td>';
-			echo '<td><strong>' . esc_html( IAMP_Sales::trainer_name( $s->trainer_id ) ) . '</strong></td>';
-			echo '<td><strong>' . esc_html( $s->client_name ) . '</strong><br><small>' . esc_html( $s->client_email ) . '<br>' . esc_html( $s->client_phone ) . '</small></td>';
-			echo '<td>' . esc_html( $pk[ $s->package_id ] ?? '' ) . ( $extra ? '<br><small class="iamp-note">+ falas: ' . esc_html( implode( ', ', $extra ) ) . '</small>' : '' ) . ( $s->note ? '<br><small>' . esc_html( $s->note ) . '</small>' : '' ) . '</td>';
-			echo '<td><strong>' . esc_html( number_format( (float) $s->amount, 2, ',', '.' ) . ' ' . $s->currency ) . '</strong><br><small>' . esc_html( $s->payment_method . ( $s->payment_ref ? ' · ' . $s->payment_ref : '' ) ) . ( $s->payment_date ? '<br>' . esc_html( mysql2date( 'd.m.Y', $s->payment_date ) ) : '' ) . '</small>';
-			if ( $s->proof_id ) {
-				echo '<br><a href="' . esc_url( wp_get_attachment_url( $s->proof_id ) ) . '" target="_blank">📎 Dëshmia</a>';
-			}
-			if ( $s->collected_by_trainer ) {
-				echo '<br><small class="iamp-note">Pagesën e mori trajneri</small>';
-			}
-			echo '</td><td>' . esc_html( self::eur( $s->commission ) ) . ' <small>(' . esc_html( rtrim( rtrim( (string) $s->commission_pct, '0' ), '.' ) ) . '%)</small>';
-			if ( 'pending' === $s->status ) {
-				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="iamp-inline"><input type="hidden" name="action" value="iamp_sale_pct"><input type="hidden" name="id" value="' . (int) $s->id . '">';
-				wp_nonce_field( 'iamp_sale_pct' );
-				echo '<input type="number" step="0.5" name="pct" value="' . esc_attr( $s->commission_pct ) . '" style="width:70px"> % <button class="button button-small">Ndrysho</button></form>';
-			}
-			echo '</td><td><span class="iamp-badge iamp-' . esc_attr( 'approved' === $s->status ? 'active' : ( 'pending' === $s->status ? 'soon' : 'revoked' ) ) . '">' . esc_html( $labels[ $s->status ] ?? $s->status ) . '</span></td><td class="iamp-actions">';
-			if ( 'pending' === $s->status ) {
-				echo '<a class="button button-primary" href="' . esc_url( self::url( 'iamp_sale_ok', array( 'id' => $s->id ) ) ) . '">✓ Konfirmo & aktivizo</a> ';
-				echo '<a class="button iamp-danger" onclick="var r=prompt(\'Arsyeja e refuzimit:\');if(r===null)return false;this.href+=\'&note=\'+encodeURIComponent(r);" href="' . esc_url( self::url( 'iamp_sale_no', array( 'id' => $s->id ) ) ) . '">Refuzo</a>';
-			} elseif ( $s->admin_note ) {
-				echo '<small>' . esc_html( $s->admin_note ) . '</small>';
-			}
-			echo '</td></tr>';
 		}
-		echo '</tbody></table></div>';
+		$balance = 0;
+		$team    = IAMP_Sales::team();
+		$per     = array();
+		foreach ( $team as $uid => $name ) {
+			$sum      = IAMP_Sales::summary( $uid );
+			$balance += $sum['balance'];
+			$per[]    = array( 'l' => $name, 'v' => $sum['sold'], 't' => self::short_eur( $sum['sold'] ) );
+		}
+		echo '<div style="display:grid;grid-template-columns:repeat(' . ( $compact ? 2 : 4 ) . ',1fr);gap:10px;margin:6px 0 16px">';
+		$k = array(
+			array( 'Shitje këtë muaj', (int) $this_m['n'] ),
+			array( 'Shuma këtë muaj', self::eur( $this_m['sold'] ) ),
+			array( 'Presin konfirmim', (int) $st['pending'] ),
+			array( 'Bonus për t\'u paguar', self::eur( $balance ) ),
+		);
+		foreach ( $k as $i => $c ) {
+			$hl = 2 === $i && $st['pending'] ? '#c0392b' : '#0b1a33';
+			echo '<div style="background:#fbf6ea;border-bottom:3px solid #c9a14a;border-radius:10px;padding:12px"><div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase">' . esc_html( $c[0] ) . '</div><div style="font-size:20px;font-weight:700;color:' . esc_attr( $hl ) . ';margin-top:4px">' . esc_html( $c[1] ) . '</div></div>';
+		}
+		echo '</div>';
+		$mi = array();
+		foreach ( $mon as $m ) {
+			$ts   = strtotime( $m['m'] . '-01' );
+			$mi[] = array( 'l' => date_i18n( 'M y', $ts ), 'v' => (float) $m['sold'], 't' => self::short_eur( $m['sold'] ) );
+		}
+		echo '<h3 style="margin:10px 0 4px">Shitjet e konfirmuara sipas muajve</h3>' . self::bars( $compact ? array_slice( $mi, -6 ) : $mi ); // phpcs:ignore
+		if ( ! $compact ) {
+			echo '<h3 style="margin:18px 0 4px">Shitjet e konfirmuara sipas trajnereve</h3>' . self::bars( $per, '#0b1a33' ); // phpcs:ignore
+			$bi = array();
+			foreach ( $mon as $m ) {
+				$bi[] = array( 'l' => date_i18n( 'M y', strtotime( $m['m'] . '-01' ) ), 'v' => (float) $m['bonus'], 't' => self::short_eur( $m['bonus'] ) );
+			}
+			echo '<h3 style="margin:18px 0 4px">Bonuset e fituara sipas muajve</h3>' . self::bars( $bi, '#1d6b35', 140 ); // phpcs:ignore
+		}
+		if ( empty( $st['ok'] ) ) {
+			echo '<p class="description">Fleta nuk u lexua tani' . ( ! empty( $st['err'] ) ? ' (' . esc_html( $st['err'] ) . ')' : '' ) . '. Po shfaqen shifrat e fundit të njohura.</p>';
+		}
+		if ( $link ) {
+			echo '<p><a class="button button-primary" target="_blank" href="' . esc_url( $link ) . '">Hap fletën "Shitjet e Skuadrës 2026"</a>' . ( $st['pending'] ? ' <strong style="color:#c0392b">' . (int) $st['pending'] . ' presin konfirmimin tënd</strong>' : '' ) . '</p>';
+		}
 	}
 
 	public static function page_team() {
 		$team = IAMP_Sales::team();
 		$s    = IAMP_Settings::all();
-		self::head( 'Skuadra & Bonuset', 'Anëtarët e Skuadrës, bonuset e tyre dhe pagesat.' );
+		self::head( 'Skuadra & Bonuset', 'Bonuset e trajnereve dhe pagesat. Shitjet ruhen vetëm te fleta Google "Shitjet e Skuadrës 2026".' );
+		echo '<div class="iamp-card"><h2>Shitjet e Skuadrës</h2>';
+		self::charts( true );
+		echo '<p class="description">Grafikonet e plota: <a href="' . esc_url( admin_url( 'admin.php?page=iamp-stats' ) ) . '">📊 Paneli i shitjeve</a>.</p></div>';
 		$course = (int) get_option( 'iamp_team_course' );
 		echo '<div class="iamp-card"><h2>Hapësira e Skuadrës në LearnDash</h2>';
 		if ( $course && get_post( $course ) ) {
@@ -265,7 +293,7 @@ class IAMP_Admin_Team {
 		if ( ! $team ) {
 			echo '<p>Shto anëtarët e Skuadrës më poshtë.</p>';
 		} else {
-			echo '<table class="widefat striped iamp-table"><thead><tr><th>Trajneri</th><th>Shitje këtë muaj</th><th>Shitje të konfirmuara</th><th>Saldo e vjetër</th><th>Bonus i fituar</th><th>Mbajtur vetë</th><th>Paguar</th><th>Për të marrë</th><th>Regjistro pagesën</th></tr></thead><tbody>';
+			echo '<table class="widefat striped iamp-table"><thead><tr><th>Trajneri</th><th>Shitje këtë muaj</th><th>Të konfirmuara</th><th>Saldo e vjetër</th><th>Bonus i fituar</th><th>Mbajtur vetë</th><th>Paguar</th><th>Për të marrë</th><th>Regjistro pagesën</th></tr></thead><tbody>';
 			$tot = array( 'opening' => 0, 'earned' => 0, 'kept' => 0, 'paid' => 0, 'balance' => 0 );
 			foreach ( $team as $uid => $name ) {
 				$m = IAMP_Sales::summary( $uid );
@@ -297,10 +325,20 @@ class IAMP_Admin_Team {
 		wp_nonce_field( 'iamp_team_save' );
 		echo '<table class="form-table"><tr><th>TVSH (%)</th><td><input type="number" step="0.1" name="vat_pct" value="' . esc_attr( $s['vat_pct'] ) . '"><p class="description">Bonusi = shuma pa TVSH × përqindja e paketës.</p></td></tr>';
 		echo '<tr><th>Njoftimet për shitje të reja</th><td><input type="email" name="notify_email" class="iamp-wide" value="' . esc_attr( $s['notify_email'] ) . '" placeholder="' . esc_attr( get_option( 'admin_email' ) ) . '"></td></tr>';
-		echo '<tr><th>Google Sheet (Apps Script URL)</th><td><input type="url" name="sheet_url" class="iamp-wide" value="' . esc_attr( $s['sheet_url'] ) . '"><p class="description">Çdo shitje kopjohet vetë në Google Sheet.</p></td></tr>';
-		echo '<tr><th>Çelësi i Google Sheet</th><td><input type="text" name="sheet_secret" class="iamp-wide" value="' . esc_attr( $s['sheet_secret'] ) . '"></td></tr></table>';
+		echo '<tr><th>Fleta "Shitjet e Skuadrës 2026" (linku)</th><td><input type="url" name="sheet_link" class="iamp-wide" value="' . esc_attr( $s['sheet_link'] ) . '"></td></tr>';
+		echo '<tr><th>Apps Script (Web App URL)</th><td><input type="url" name="sheet_url" class="iamp-wide" value="' . esc_attr( $s['sheet_url'] ) . '"><p class="description">Çdo shitje dërgohet vetëm te fleta; në WordPress nuk ruhet.</p></td></tr>';
+		echo '<tr><th>Çelësi i fletës</th><td><code style="user-select:all">' . esc_html( $s['sheet_secret'] ) . '</code><p class="description">Kopjoje te Apps Script i fletës, te rreshti <code>var CELESI</code>.</p></td></tr></table>';
 		submit_button( 'Ruaj' );
-		echo '</form></div></div>';
+		echo '<p><a class="button" href="' . esc_url( self::url( 'iamp_sheet_test' ) ) . '">Provo lidhjen me fletën</a> ';
+		$old = IAMP_Sales::old_count();
+		if ( $old && ! get_option( 'iamp_sales_imported' ) ) {
+			echo '<a class="button" href="' . esc_url( self::url( 'iamp_sheet_import' ) ) . '" onclick="return confirm(\'Të kalohen ' . (int) $old . ' shitjet e vjetra te fleta?\')">Kalo ' . (int) $old . ' shitjet e vjetra te fleta</a>';
+		}
+		$q = (array) get_option( 'iamp_sheet_queue', array() );
+		if ( $q ) {
+			echo '<br><strong style="color:#c0392b">' . count( $q ) . ' shitje presin të dërgohen te fleta (provohet çdo orë).</strong>';
+		}
+		echo '</p></form></div></div>';
 
 		$pays = IAMP_Sales::payouts();
 		if ( $pays ) {

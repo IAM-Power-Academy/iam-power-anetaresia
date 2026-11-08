@@ -7,6 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Shitjet e Skuadrës, bonuset (provizionet) dhe pagesat e bonuseve.
  *
  * Bonusi = (shuma / (1 + TVSH)) × përqindja e paketës.
+ * Shitjet ruhen vetëm te fleta Google "Shitjet e Skuadrës 2026"; aty Mimoza i konfirmon.
  * Asnjë shitje nuk aktivizohet pa konfirmimin e Mimozës.
  */
 class IAMP_Sales {
@@ -65,7 +66,12 @@ class IAMP_Sales {
 		IAMP_Log::add( 'team', $user_id, 'U hoq nga Skuadra' );
 	}
 
-	/* ---------------- Shitjet ---------------- */
+	/* ---------------- Shitjet (ruhen vetëm në Google Sheet) ---------------- */
+
+	public static function init() {
+		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
+		add_action( 'iamp_daily_check', array( __CLASS__, 'flush_queue' ) );
+	}
 
 	public static function vat() {
 		$v = IAMP_Settings::get( 'vat_pct' );
@@ -76,17 +82,30 @@ class IAMP_Sales {
 		return round( ( (float) $amount / ( 1 + self::vat() / 100 ) ) * ( (float) $pct / 100 ), 2 );
 	}
 
-	public static function get( $id ) {
+	/** A është lidhur fleta "Shitjet e Skuadrës 2026"? */
+	public static function sheet_ready() {
+		return (bool) IAMP_Settings::get( 'sheet_url' );
+	}
+
+	/** Numri i radhës i shitjes (vetëm numëruesi ruhet në WordPress). */
+	private static function next_id() {
 		global $wpdb;
-		$t = IAMP_DB::table( 'sales' );
-		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $t WHERE id = %d", $id ) ); // phpcs:ignore
+		$n = (int) get_option( 'iamp_sale_seq', 0 );
+		if ( ! $n ) {
+			$t = IAMP_DB::table( 'sales' );
+			$n = (int) $wpdb->get_var( "SELECT COALESCE(MAX(id),0) FROM $t" ); // phpcs:ignore
+		}
+		$n++;
+		update_option( 'iamp_sale_seq', $n, false );
+		return $n;
 	}
 
 	/**
+	 * Regjistron shitjen: dërgohet direkt te Google Sheet. Asgjë nga shitja nuk ruhet në WordPress.
+	 *
 	 * @return int|WP_Error
 	 */
 	public static function create( $data ) {
-		global $wpdb;
 		$pkg = IAMP_DB::get_package( (int) $data['package_id'] );
 		if ( ! $pkg ) {
 			return new WP_Error( 'iamp_sale', 'Zgjidh kursin ose ofertën.' );
@@ -94,130 +113,217 @@ class IAMP_Sales {
 		if ( ! is_email( $data['client_email'] ) ) {
 			return new WP_Error( 'iamp_sale', 'Email-i i klientit nuk është i saktë.' );
 		}
-		$pct = (float) $pkg->commission_pct;
-		$row = array(
-			'created_at'           => IAMP_DB::now(),
-			'trainer_id'           => (int) $data['trainer_id'],
-			'client_name'          => $data['client_name'],
-			'client_email'         => strtolower( $data['client_email'] ),
-			'client_phone'         => $data['client_phone'],
-			'package_id'           => (int) $pkg->id,
-			'extra_courses'        => IAMP_DB::ids_to_string( $data['extra_courses'] ),
-			'amount'               => (float) $data['amount'],
-			'currency'             => $data['currency'] ? $data['currency'] : 'EUR',
-			'payment_method'       => $data['payment_method'],
-			'payment_ref'          => $data['payment_ref'],
-			'payment_date'         => $data['payment_date'] ? $data['payment_date'] : null,
-			'proof_id'             => (int) $data['proof_id'],
-			'collected_by_trainer' => $data['collected_by_trainer'] ? 1 : 0,
-			'commission_pct'       => $pct,
-			'commission'           => self::commission( $data['amount'], $pct ),
-			'status'               => 'pending',
-			'note'                 => $data['note'],
+		if ( ! self::sheet_ready() ) {
+			return new WP_Error( 'iamp_sale', 'Regjistrimi i shitjeve nuk është lidhur ende. Njofto Mimozën.' );
+		}
+		$pct    = (float) $pkg->commission_pct;
+		$extras = array();
+		$ids    = array_filter( array_map( 'absint', (array) $data['extra_courses'] ) );
+		foreach ( $ids as $cid ) {
+			$extras[] = get_the_title( $cid );
+		}
+		$id   = self::next_id();
+		$body = array(
+			'action'        => 'new',
+			'id'            => $id,
+			'data'          => current_time( 'd.m.Y H:i' ),
+			'trajneri'      => self::trainer_name( $data['trainer_id'] ),
+			'trajneri_id'   => (int) $data['trainer_id'],
+			'klienti'       => $data['client_name'],
+			'email'         => strtolower( $data['client_email'] ),
+			'telefoni'      => $data['client_phone'],
+			'kursi'         => $pkg->name,
+			'paketa_id'     => (int) $pkg->id,
+			'bonuset'       => implode( ', ', $extras ),
+			'kurset_id'     => implode( ',', $ids ),
+			'shuma'         => (float) $data['amount'],
+			'valuta'        => $data['currency'] ? $data['currency'] : 'EUR',
+			'pagesa'        => $data['payment_method'],
+			'referenca'     => $data['payment_ref'],
+			'data_pageses'  => $data['payment_date'] ? mysql2date( 'd.m.Y', $data['payment_date'] ) : '',
+			'mori_trajneri' => $data['collected_by_trainer'] ? 'Po' : 'Jo',
+			'bonus_pct'     => $pct,
+			'tvsh'          => self::vat(),
+			'statusi'       => 'Pret konfirmim',
+			'shenime'       => $data['note'],
+			'deshmia'       => '',
 		);
-		$wpdb->insert( IAMP_DB::table( 'sales' ), $row );
-		$id = (int) $wpdb->insert_id;
-		IAMP_Log::add( 'sale_new', 0, array( 'shitja' => $id, 'trajneri' => self::trainer_name( $row['trainer_id'] ), 'klienti' => $row['client_email'], 'paketa' => $pkg->name, 'shuma' => $row['amount'] ) );
-		self::notify_admin( $id );
-		self::sync( $id );
+		if ( ! empty( $data['proof']['b64'] ) ) {
+			$body['deshmia_emri'] = $data['proof']['emri'];
+			$body['deshmia_tipi'] = $data['proof']['tipi'];
+			$body['deshmia_b64']  = $data['proof']['b64'];
+		}
+		$res = self::send( $body );
+		unset( $body['deshmia_b64'] );
+		if ( is_wp_error( $res ) ) {
+			if ( ! empty( $data['proof']['b64'] ) && strlen( $data['proof']['b64'] ) < 3 * MB_IN_BYTES ) {
+				$body['deshmia_b64'] = $data['proof']['b64'];
+			}
+			// Fleta nuk u arrit: provohet sërish vetë çdo orë, që shitja të mos humbasë.
+			$q   = (array) get_option( 'iamp_sheet_queue', array() );
+			$q[] = $body;
+			update_option( 'iamp_sheet_queue', $q, false );
+			IAMP_Log::add( 'sheet_error', 0, 'Shitja #' . $id . ' pret dërgimin te fleta: ' . $res->get_error_message() );
+		}
+		self::notify_admin( $body );
+		self::flush_summary();
 		return $id;
 	}
 
-	public static function update( $id, $row ) {
-		global $wpdb;
-		$wpdb->update( IAMP_DB::table( 'sales' ), $row, array( 'id' => (int) $id ) );
+	/**
+	 * Dërgon një kërkesë te Apps Script i fletës.
+	 *
+	 * @return array|WP_Error Përgjigjja JSON.
+	 */
+	public static function send( $body ) {
+		$url = IAMP_Settings::get( 'sheet_url' );
+		if ( ! $url ) {
+			return new WP_Error( 'iamp_sheet', 'Fleta nuk është lidhur.' );
+		}
+		$body['secret'] = IAMP_Settings::get( 'sheet_secret' );
+		$r = wp_remote_post(
+			$url,
+			array(
+				'timeout'     => 25,
+				'redirection' => 5,
+				'headers'     => array( 'Content-Type' => 'application/json' ),
+				'body'        => wp_json_encode( $body ),
+			)
+		);
+		if ( is_wp_error( $r ) ) {
+			return $r;
+		}
+		$json = json_decode( wp_remote_retrieve_body( $r ), true );
+		if ( ! is_array( $json ) || empty( $json['ok'] ) ) {
+			$msg = is_array( $json ) && ! empty( $json['error'] ) ? $json['error'] : 'Përgjigje e papritur (' . wp_remote_retrieve_response_code( $r ) . ').';
+			return new WP_Error( 'iamp_sheet', $msg );
+		}
+		return $json;
 	}
 
-	public static function set_pct( $id, $pct ) {
-		$s = self::get( $id );
-		if ( ! $s ) {
+	/** Riprovon shitjet që nuk arritën te fleta. */
+	public static function flush_queue() {
+		$q = (array) get_option( 'iamp_sheet_queue', array() );
+		if ( ! $q ) {
 			return;
 		}
-		self::update( $id, array( 'commission_pct' => (float) $pct, 'commission' => self::commission( $s->amount, $pct ) ) );
-		self::sync( $id );
+		$left = array();
+		foreach ( $q as $body ) {
+			if ( is_wp_error( self::send( $body ) ) ) {
+				$left[] = $body;
+			}
+		}
+		update_option( 'iamp_sheet_queue', $left, false );
+		self::flush_summary();
+	}
+
+	/* ---------------- Lidhja fleta → webfaqja ---------------- */
+
+	public static function routes() {
+		register_rest_route(
+			'iampower/v1',
+			'/fleta',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'from_sheet' ),
+				'permission_callback' => '__return_true', // Kontrolli bëhet me çelësin sekret.
+			)
+		);
 	}
 
 	/**
-	 * Konfirmo: aktivizon klientin (paketa + bonuset shtesë) dhe e kalon shitjen te "Konfirmuar".
-	 *
-	 * @return true|WP_Error
+	 * Thirret nga fleta kur Mimoza zgjedh "Konfirmo" (aktivizon klientin) ose kur ndryshon diçka.
 	 */
-	public static function approve( $id, $admin_note = '' ) {
-		$s = self::get( $id );
-		if ( ! $s || 'pending' !== $s->status ) {
-			return new WP_Error( 'iamp_sale', 'Shitja nuk pret konfirmim.' );
+	public static function from_sheet( WP_REST_Request $request ) {
+		$d      = (array) $request->get_json_params();
+		$secret = isset( $d['secret'] ) ? (string) $d['secret'] : '';
+		if ( ! $secret || ! hash_equals( (string) IAMP_Settings::get( 'sheet_secret' ), $secret ) ) {
+			IAMP_Log::add( 'sheet_error', 0, 'Çelës i pasaktë nga fleta, IP ' . IAMP_Log::ip() );
+			return new WP_REST_Response( array( 'ok' => false, 'error' => 'FORBIDDEN' ), 403 );
 		}
-		$parts = explode( ' ', trim( $s->client_name ), 2 );
-		$res   = IAMP_Access::grant(
+		$action = isset( $d['action'] ) ? $d['action'] : '';
+		if ( 'refresh' === $action || 'ping' === $action ) {
+			self::flush_summary();
+			return new WP_REST_Response( array( 'ok' => true ) );
+		}
+		if ( 'approve' !== $action ) {
+			return new WP_REST_Response( array( 'ok' => false, 'error' => 'Veprim i panjohur.' ), 400 );
+		}
+		$email = sanitize_email( isset( $d['email'] ) ? $d['email'] : '' );
+		if ( ! is_email( $email ) ) {
+			return new WP_REST_Response( array( 'ok' => false, 'error' => 'Email-i i klientit nuk është i saktë.' ) );
+		}
+		$pkg = IAMP_DB::get_package( isset( $d['paketa_id'] ) ? (int) $d['paketa_id'] : 0 );
+		if ( ! $pkg ) {
+			return new WP_REST_Response( array( 'ok' => false, 'error' => 'Paketa nuk u gjet në webfaqe.' ) );
+		}
+		$name    = trim( sanitize_text_field( isset( $d['klienti'] ) ? $d['klienti'] : '' ) );
+		$parts   = explode( ' ', $name, 2 );
+		$courses = array_filter( array_map( 'absint', explode( ',', isset( $d['kurset_id'] ) ? (string) $d['kurset_id'] : '' ) ) );
+		$res     = IAMP_Access::grant(
 			array(
-				'email'        => $s->client_email,
+				'email'        => $email,
 				'first_name'   => $parts[0],
 				'last_name'    => isset( $parts[1] ) ? $parts[1] : '',
-				'package_id'   => (int) $s->package_id,
-				'courses'      => IAMP_DB::string_to_ids( $s->extra_courses ),
+				'package_id'   => (int) $pkg->id,
+				'courses'      => $courses,
 				'source'       => 'shitje',
-				'external_ref' => 'shitje:' . $s->id,
-				'note'         => 'Trajneri: ' . self::trainer_name( $s->trainer_id ) . ( $s->note ? ' · ' . $s->note : '' ),
+				'external_ref' => 'shitje:' . absint( isset( $d['id'] ) ? $d['id'] : 0 ),
+				'note'         => 'Trajneri: ' . sanitize_text_field( isset( $d['trajneri'] ) ? $d['trajneri'] : '' ),
 				'send_email'   => true,
 			)
 		);
+		self::flush_summary();
 		if ( is_wp_error( $res ) ) {
-			return $res;
+			return new WP_REST_Response( array( 'ok' => false, 'error' => $res->get_error_message() ) );
 		}
-		self::update(
-			$id,
-			array(
-				'status'        => 'approved',
-				'membership_id' => (int) $res['membership_id'],
-				'decided_at'    => IAMP_DB::now(),
-				'decided_by'    => get_current_user_id(),
-				'admin_note'    => $admin_note,
-			)
+		return new WP_REST_Response( array( 'ok' => true, 'membership_id' => (int) $res['membership_id'], 'duplicate' => ! empty( $res['duplicate'] ) ) );
+	}
+
+	/* ---------------- Përmbledhjet nga fleta ---------------- */
+
+	public static function flush_summary() {
+		delete_transient( 'iamp_sheet_sum' );
+	}
+
+	/**
+	 * Totalet e lexuara nga fleta (ruhen 10 minuta). Nuk përmbajnë emra klientësh.
+	 *
+	 * @return array{trainers:array,months:array,pending:int,ok:bool}
+	 */
+	public static function sheet_stats() {
+		$c = get_transient( 'iamp_sheet_sum' );
+		if ( is_array( $c ) ) {
+			return $c;
+		}
+		$empty = array( 'trainers' => array(), 'months' => array(), 'days' => array(), 'pending' => 0, 'ok' => false );
+		if ( ! self::sheet_ready() ) {
+			return $empty;
+		}
+		$r = self::send( array( 'action' => 'summary' ) );
+		if ( is_wp_error( $r ) ) {
+			$last       = get_option( 'iamp_sheet_sum_last' );
+			$out        = is_array( $last ) ? $last : $empty;
+			$out['ok']  = false;
+			$out['err'] = $r->get_error_message();
+			set_transient( 'iamp_sheet_sum', $out, 2 * MINUTE_IN_SECONDS );
+			return $out;
+		}
+		$out = array(
+			'trainers' => isset( $r['trainers'] ) ? (array) $r['trainers'] : array(),
+			'months'   => isset( $r['months'] ) ? (array) $r['months'] : array(),
+			'pending'  => isset( $r['pending'] ) ? (int) $r['pending'] : 0,
+			'days'     => isset( $r['days'] ) ? (array) $r['days'] : array(),
+			'ok'       => true,
 		);
-		IAMP_Log::add( 'sale_ok', $res['user_id'], array( 'shitja' => (int) $id, 'trajneri' => self::trainer_name( $s->trainer_id ) ) );
-		self::sync( $id );
-		return true;
-	}
-
-	public static function reject( $id, $admin_note = '' ) {
-		$s = self::get( $id );
-		if ( ! $s || 'pending' !== $s->status ) {
-			return false;
-		}
-		self::update( $id, array( 'status' => 'rejected', 'decided_at' => IAMP_DB::now(), 'decided_by' => get_current_user_id(), 'admin_note' => $admin_note ) );
-		IAMP_Log::add( 'sale_no', 0, array( 'shitja' => (int) $id, 'arsyeja' => $admin_note ) );
-		self::sync( $id );
-		return true;
-	}
-
-	public static function query( $args = array() ) {
-		global $wpdb;
-		$t     = IAMP_DB::table( 'sales' );
-		$where = array( '1=1' );
-		$vals  = array();
-		if ( ! empty( $args['trainer_id'] ) ) {
-			$where[] = 'trainer_id = %d';
-			$vals[]  = (int) $args['trainer_id'];
-		}
-		if ( ! empty( $args['status'] ) ) {
-			$where[] = 'status = %s';
-			$vals[]  = $args['status'];
-		}
-		if ( ! empty( $args['search'] ) ) {
-			$like    = '%' . $wpdb->esc_like( $args['search'] ) . '%';
-			$where[] = '(client_name LIKE %s OR client_email LIKE %s)';
-			$vals[]  = $like;
-			$vals[]  = $like;
-		}
-		$limit = isset( $args['limit'] ) ? (int) $args['limit'] : 200;
-		$sql   = "SELECT * FROM $t WHERE " . implode( ' AND ', $where ) . " ORDER BY (status = 'pending') DESC, id DESC LIMIT $limit";
-		return $vals ? $wpdb->get_results( $wpdb->prepare( $sql, $vals ) ) : $wpdb->get_results( $sql ); // phpcs:ignore
+		set_transient( 'iamp_sheet_sum', $out, 10 * MINUTE_IN_SECONDS );
+		update_option( 'iamp_sheet_sum_last', $out, false );
+		return $out;
 	}
 
 	public static function pending_count() {
-		global $wpdb;
-		$t = IAMP_DB::table( 'sales' );
-		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t WHERE status = 'pending'" ); // phpcs:ignore
+		$s = self::sheet_stats();
+		return (int) $s['pending'];
 	}
 
 	/* ---------------- Bonuset ---------------- */
@@ -257,94 +363,113 @@ class IAMP_Sales {
 
 	/**
 	 * Përmbledhja e bonuseve të një trajneri.
-	 *  earned   = bonuset e shitjeve të konfirmuara
-	 *  kept     = bonuset që trajneri i mbajti vetë nga pagesa që mori
-	 *  paid     = bonuset që Mimoza ia ka paguar
-	 *  opening  = saldo e mbetur nga llogaritë e vjetra (pozitive = i takon trajnerit)
-	 *  balance  = sa i mbetet për të marrë
+	 *  earned / kept / shitjet  = nga fleta "Shitjet e Skuadrës 2026"
+	 *  paid / opening          = pagesat e bonuseve që Mimoza regjistron te Skuadra & Bonuset
+	 *  balance                 = opening + earned − kept − paid
 	 */
-	public static function summary( $trainer_id, $year = 0 ) {
+	public static function summary( $trainer_id ) {
 		global $wpdb;
-		$s  = IAMP_DB::table( 'sales' );
-		$p  = IAMP_DB::table( 'payouts' );
-		$id = (int) $trainer_id;
-		$r  = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) n, COALESCE(SUM(amount),0) sold, COALESCE(SUM(commission),0) earned, COALESCE(SUM(CASE WHEN collected_by_trainer=1 THEN commission ELSE 0 END),0) kept FROM $s WHERE trainer_id = %d AND status = 'approved'", $id ) ); // phpcs:ignore
-		$pending = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) n, COALESCE(SUM(commission),0) c FROM $s WHERE trainer_id = %d AND status = 'pending'", $id ) ); // phpcs:ignore
+		$p       = IAMP_DB::table( 'payouts' );
+		$id      = (int) $trainer_id;
+		$stats   = self::sheet_stats();
+		$t       = isset( $stats['trainers'][ $id ] ) ? (array) $stats['trainers'][ $id ] : array();
+		$g       = function ( $k ) use ( $t ) {
+			return isset( $t[ $k ] ) ? (float) $t[ $k ] : 0.0;
+		};
 		$paid    = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $p WHERE trainer_id = %d AND kind = 'payout'", $id ) ); // phpcs:ignore
 		$opening = -1 * (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $p WHERE trainer_id = %d AND kind = 'opening'", $id ) ); // phpcs:ignore
-		$month   = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) n, COALESCE(SUM(amount),0) sold, COALESCE(SUM(commission),0) c FROM $s WHERE trainer_id = %d AND status IN ('approved','pending') AND created_at >= %s", $id, current_time( 'Y-m-01 00:00:00' ) ) ); // phpcs:ignore
-		$earned  = (float) $r->earned;
-		$kept    = (float) $r->kept;
+		$earned  = $g( 'earned' );
+		$kept    = $g( 'kept' );
 		return array(
-			'count'         => (int) $r->n,
-			'sold'          => (float) $r->sold,
-			'earned'        => $earned,
-			'kept'          => $kept,
-			'paid'          => $paid,
-			'opening'       => $opening,
-			'balance'       => round( $opening + $earned - $kept - $paid, 2 ),
-			'pending_n'     => (int) $pending->n,
-			'pending_c'     => (float) $pending->c,
-			'month_n'       => (int) $month->n,
-			'month_sold'    => (float) $month->sold,
-			'month_c'       => (float) $month->c,
+			'count'      => (int) $g( 'count' ),
+			'sold'       => $g( 'sold' ),
+			'earned'     => $earned,
+			'kept'       => $kept,
+			'paid'       => $paid,
+			'opening'    => $opening,
+			'balance'    => round( $opening + $earned - $kept - $paid, 2 ),
+			'pending_n'  => (int) $g( 'pending_n' ),
+			'pending_c'  => $g( 'pending_c' ),
+			'month_n'    => (int) $g( 'month_n' ),
+			'month_sold' => $g( 'month_sold' ),
+			'month_c'    => $g( 'month_c' ),
+			'sheet_ok'   => ! empty( $stats['ok'] ),
 		);
 	}
 
-	/* ---------------- Njoftime dhe Google Sheet ---------------- */
+	/* ---------------- Njoftimi ---------------- */
 
-	private static function notify_admin( $id ) {
-		$s   = self::get( $id );
-		$pkg = IAMP_DB::get_package( $s->package_id );
-		$to  = IAMP_Settings::get( 'notify_email' );
-		$to  = $to ? $to : get_option( 'admin_email' );
-		$msg = 'Shitje e re nga ' . self::trainer_name( $s->trainer_id ) . ":\n\n"
-			. 'Klienti: ' . $s->client_name . ' (' . $s->client_email . ")\n"
-			. 'Kursi: ' . ( $pkg ? $pkg->name : '' ) . "\n"
-			. 'Paguar: ' . number_format( (float) $s->amount, 2 ) . ' ' . $s->currency . ' · ' . $s->payment_method . "\n\n"
-			. 'Konfirmo te: ' . admin_url( 'admin.php?page=iamp-sales' );
-		wp_mail( $to, 'IAM Power: shitje e re pret konfirmim (' . $s->client_name . ')', $msg );
+	private static function notify_admin( $b ) {
+		$to   = IAMP_Settings::get( 'notify_email' );
+		$to   = $to ? $to : get_option( 'admin_email' );
+		$link = IAMP_Settings::get( 'sheet_link' );
+		$msg  = 'Shitje e re nga ' . $b['trajneri'] . ":\n\n"
+			. 'Klienti: ' . $b['klienti'] . ' (' . $b['email'] . ")\n"
+			. 'Kursi: ' . $b['kursi'] . "\n"
+			. 'Paguar: ' . number_format( (float) $b['shuma'], 2 ) . ' ' . $b['valuta'] . ' · ' . $b['pagesa'] . "\n\n"
+			. 'Konfirmo te fleta "Shitjet e Skuadrës 2026"' . ( $link ? ': ' . $link : ' në Google Drive (CLAUDE SKUADRA).' );
+		wp_mail( $to, 'IAM Power: shitje e re pret konfirmim (' . $b['klienti'] . ')', $msg );
 	}
 
 	/**
-	 * Dërgon shitjen te Google Sheet përmes Apps Script (Web App). Nëse nuk është vendosur URL, nuk bën asgjë.
+	 * Shitjet e vjetra që u regjistruan në WordPress para versionit 1.3.0 — kalohen te fleta një herë.
+	 *
+	 * @return int|WP_Error Sa u dërguan.
 	 */
-	public static function sync( $id ) {
-		$url = IAMP_Settings::get( 'sheet_url' );
-		if ( ! $url ) {
-			return;
-		}
-		$s = self::get( $id );
-		if ( ! $s ) {
-			return;
-		}
-		$pkg    = IAMP_DB::get_package( $s->package_id );
-		$extras = array();
-		foreach ( IAMP_DB::string_to_ids( $s->extra_courses ) as $cid ) {
-			$extras[] = get_the_title( $cid );
+	public static function import_old() {
+		global $wpdb;
+		$t    = IAMP_DB::table( 'sales' );
+		$rows = $wpdb->get_results( "SELECT * FROM $t ORDER BY id ASC" ); // phpcs:ignore
+		if ( ! $rows ) {
+			return 0;
 		}
 		$labels = array( 'pending' => 'Pret konfirmim', 'approved' => 'Konfirmuar dhe aktivizuar', 'rejected' => 'Refuzuar' );
-		$body   = array(
-			'secret'      => IAMP_Settings::get( 'sheet_secret' ),
-			'id'          => (int) $s->id,
-			'data'        => mysql2date( 'd.m.Y H:i', $s->created_at ),
-			'trajneri'    => self::trainer_name( $s->trainer_id ),
-			'klienti'     => $s->client_name,
-			'email'       => $s->client_email,
-			'telefoni'    => $s->client_phone,
-			'kursi'       => $pkg ? $pkg->name : '',
-			'bonuset'     => implode( ', ', $extras ),
-			'shuma'       => (float) $s->amount,
-			'valuta'      => $s->currency,
-			'pagesa'      => $s->payment_method,
-			'referenca'   => $s->payment_ref,
-			'data_pageses'=> $s->payment_date,
-			'mori_trajneri' => $s->collected_by_trainer ? 'Po' : 'Jo',
-			'bonus_pct'   => (float) $s->commission_pct,
-			'bonus'       => (float) $s->commission,
-			'statusi'     => isset( $labels[ $s->status ] ) ? $labels[ $s->status ] : $s->status,
-			'shenime'     => $s->note,
-		);
-		wp_remote_post( $url, array( 'timeout' => 8, 'blocking' => false, 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => wp_json_encode( $body ) ) );
+		$out    = array();
+		foreach ( $rows as $s ) {
+			$pkg    = IAMP_DB::get_package( $s->package_id );
+			$extras = array();
+			foreach ( IAMP_DB::string_to_ids( $s->extra_courses ) as $cid ) {
+				$extras[] = get_the_title( $cid );
+			}
+			$out[] = array(
+				'id'            => (int) $s->id,
+				'data'          => mysql2date( 'd.m.Y H:i', $s->created_at ),
+				'trajneri'      => self::trainer_name( $s->trainer_id ),
+				'trajneri_id'   => (int) $s->trainer_id,
+				'klienti'       => $s->client_name,
+				'email'         => $s->client_email,
+				'telefoni'      => $s->client_phone,
+				'kursi'         => $pkg ? $pkg->name : '',
+				'paketa_id'     => (int) $s->package_id,
+				'bonuset'       => implode( ', ', $extras ),
+				'kurset_id'     => $s->extra_courses,
+				'shuma'         => (float) $s->amount,
+				'valuta'        => $s->currency,
+				'pagesa'        => $s->payment_method,
+				'referenca'     => $s->payment_ref,
+				'data_pageses'  => $s->payment_date ? mysql2date( 'd.m.Y', $s->payment_date ) : '',
+				'mori_trajneri' => $s->collected_by_trainer ? 'Po' : 'Jo',
+				'bonus_pct'     => (float) $s->commission_pct,
+				'tvsh'          => self::vat(),
+				'statusi'       => isset( $labels[ $s->status ] ) ? $labels[ $s->status ] : $s->status,
+				'shenime'       => trim( $s->note . ( $s->admin_note ? ' · ' . $s->admin_note : '' ) ),
+				'deshmia'       => $s->proof_id ? wp_get_attachment_url( $s->proof_id ) : '',
+				'aktivizuar'    => 'approved' === $s->status && $s->decided_at ? mysql2date( 'd.m.Y H:i', $s->decided_at ) : '',
+			);
+		}
+		$r = self::send( array( 'action' => 'import', 'rows' => $out ) );
+		if ( is_wp_error( $r ) ) {
+			return $r;
+		}
+		update_option( 'iamp_sales_imported', count( $out ), false );
+		self::flush_summary();
+		return count( $out );
+	}
+
+	/** Sa shitje të vjetra kanë mbetur në tabelën e WordPress-it. */
+	public static function old_count() {
+		global $wpdb;
+		$t = IAMP_DB::table( 'sales' );
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t" ); // phpcs:ignore
 	}
 }

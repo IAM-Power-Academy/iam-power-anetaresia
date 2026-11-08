@@ -35,6 +35,7 @@ class IAMP_Settings {
 			'notify_email'         => '',
 			'sheet_url'            => '',
 			'sheet_secret'         => '',
+			'sheet_link'           => 'https://docs.google.com/spreadsheets/d/1qDFiflVN1Txufd8EJ_U3gf_EECF6g_hn9wpGGXmD-aI/edit',
 		);
 	}
 

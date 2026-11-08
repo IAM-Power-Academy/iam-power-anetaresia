@@ -173,18 +173,20 @@ class IAMP_Team_Front {
 			return isset( $_POST[ $k ] ) ? sanitize_text_field( wp_unslash( $_POST[ $k ] ) ) : ''; // phpcs:ignore
 		};
 
-		$proof = 0;
-		if ( ! empty( $_FILES['iamp_proof']['name'] ) ) {
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-			require_once ABSPATH . 'wp-admin/includes/media.php';
-			require_once ABSPATH . 'wp-admin/includes/image.php';
-			$type = wp_check_filetype( sanitize_file_name( wp_unslash( $_FILES['iamp_proof']['name'] ) ) ); // phpcs:ignore
-			if ( in_array( $type['ext'], array( 'jpg', 'jpeg', 'png', 'pdf', 'webp', 'heic' ), true ) ) {
-				$up = media_handle_upload( 'iamp_proof', 0 );
-				if ( ! is_wp_error( $up ) ) {
-					$proof = (int) $up;
+		// Dëshmia e pagesës nuk ruhet në WordPress: dërgohet te dosja e fletës në Google Drive.
+		$proof = array();
+		if ( ! empty( $_FILES['iamp_proof']['name'] ) && ! empty( $_FILES['iamp_proof']['tmp_name'] ) && is_uploaded_file( $_FILES['iamp_proof']['tmp_name'] ) ) { // phpcs:ignore
+			$fname = sanitize_file_name( wp_unslash( $_FILES['iamp_proof']['name'] ) ); // phpcs:ignore
+			$ext   = strtolower( pathinfo( $fname, PATHINFO_EXTENSION ) );
+			$types = array( 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'heic' => 'image/heic', 'pdf' => 'application/pdf' );
+			$size  = (int) $_FILES['iamp_proof']['size']; // phpcs:ignore
+			if ( isset( $types[ $ext ] ) && $size > 0 && $size <= 8 * MB_IN_BYTES ) {
+				$raw = file_get_contents( $_FILES['iamp_proof']['tmp_name'] ); // phpcs:ignore
+				if ( false !== $raw ) {
+					$proof = array( 'emri' => $fname, 'tipi' => $types[ $ext ], 'b64' => base64_encode( $raw ) ); // phpcs:ignore
 				}
 			}
+			@unlink( $_FILES['iamp_proof']['tmp_name'] ); // phpcs:ignore
 		}
 
 		$trainer = get_current_user_id();
@@ -205,7 +207,7 @@ class IAMP_Team_Front {
 				'payment_method'       => $p( 'iamp_method' ),
 				'payment_ref'          => $p( 'iamp_ref' ),
 				'payment_date'         => $p( 'iamp_paydate' ),
-				'proof_id'             => $proof,
+				'proof'                => $proof,
 				'collected_by_trainer' => ! empty( $_POST['iamp_collected'] ),
 				'note'                 => isset( $_POST['iamp_note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['iamp_note'] ) ) : '',
 			)
@@ -216,7 +218,7 @@ class IAMP_Team_Front {
 			set_transient( 'iamp_sale_msg_' . get_current_user_id(), array( 'ok', 'Shitja u regjistrua. Klienti aktivizohet sapo Mimoza ta konfirmojë.' ), 120 );
 			$back = $p( 'iamp_return' );
 			$back = $back ? $back : ( wp_get_referer() ? wp_get_referer() : home_url( '/' ) );
-			wp_safe_redirect( add_query_arg( 'u', $res, $back ) );
+			wp_safe_redirect( add_query_arg( 'u', (int) $res, $back ) );
 			exit;
 		}
 	}
@@ -318,13 +320,7 @@ class IAMP_Team_Front {
 			}
 		}
 		$sum   = IAMP_Sales::summary( $uid );
-		$sales = IAMP_Sales::query( array( 'trainer_id' => $uid, 'limit' => 300 ) );
 		$pays  = IAMP_Sales::payouts( $uid );
-		$pk    = array();
-		foreach ( IAMP_DB::get_packages() as $p ) {
-			$pk[ $p->id ] = $p->name;
-		}
-		$labels = array( 'pending' => 'Pret konfirmim', 'approved' => 'Aktivizuar', 'rejected' => 'Refuzuar' );
 		ob_start();
 		echo self::css(); // phpcs:ignore
 		if ( class_exists( 'IAMP_Admin_Stats' ) ) {
@@ -339,7 +335,7 @@ class IAMP_Team_Front {
 					<?php endforeach; ?>
 				</div>
 			<?php endif; ?>
-			<div class="iamt-head"><h2>Paneli im — <?php echo esc_html( IAMP_Sales::trainer_name( $uid ) ); ?></h2><p>Shitjet dhe bonuset e tua. I sheh vetëm ti dhe Mimoza.</p></div>
+			<div class="iamt-head"><h2>Paneli im — <?php echo esc_html( IAMP_Sales::trainer_name( $uid ) ); ?></h2><p>Totalet e shitjeve dhe bonusi yt. I sheh vetëm ti dhe Mimoza.</p></div>
 			<div class="iamt-kpis">
 				<div class="iamt-kpi"><span>Shitje këtë muaj</span><strong><?php echo (int) $sum['month_n']; ?></strong></div>
 				<div class="iamt-kpi"><span>Bonus këtë muaj</span><strong><?php echo esc_html( self::eur( $sum['month_c'] ) ); ?></strong></div>
@@ -358,23 +354,12 @@ class IAMP_Team_Front {
 			</div>
 			<div class="iamt-card">
 				<h3 style="margin-top:0">Shitjet e mia</h3>
-				<?php if ( ! $sales ) : ?>
-					<p>Ende nuk ke shitje të regjistruara këtu.</p>
-				<?php else : ?>
 				<table>
-					<tr><th>Data</th><th>Klienti</th><th>Kursi</th><th>Paguar</th><th>Bonus</th><th>Statusi</th></tr>
-					<?php foreach ( $sales as $s ) : ?>
-						<tr>
-							<td><?php echo esc_html( mysql2date( 'd.m.Y', $s->created_at ) ); ?></td>
-							<td><?php echo esc_html( $s->client_name ); ?><br><small><?php echo esc_html( $s->client_email ); ?></small></td>
-							<td><?php echo esc_html( isset( $pk[ $s->package_id ] ) ? $pk[ $s->package_id ] : '' ); ?></td>
-							<td><?php echo esc_html( number_format( (float) $s->amount, 2, ',', '.' ) . ' ' . $s->currency ); ?></td>
-							<td><?php echo esc_html( self::eur( $s->commission ) ); ?> <small>(<?php echo esc_html( rtrim( rtrim( (string) $s->commission_pct, '0' ), '.' ) ); ?>%)</small></td>
-							<td><span class="iamt-b <?php echo esc_attr( $s->status ); ?>"><?php echo esc_html( $labels[ $s->status ] ?? $s->status ); ?></span></td>
-						</tr>
-					<?php endforeach; ?>
+					<tr><td>Shitje të konfirmuara</td><td style="text-align:right"><?php echo (int) $sum['count']; ?> · <?php echo esc_html( self::eur( $sum['sold'] ) ); ?></td></tr>
+					<tr><td>Presin konfirmim nga Mimoza</td><td style="text-align:right"><?php echo (int) $sum['pending_n']; ?> · bonus <?php echo esc_html( self::eur( $sum['pending_c'] ) ); ?></td></tr>
+					<tr><td>Këtë muaj</td><td style="text-align:right"><?php echo (int) $sum['month_n']; ?> · <?php echo esc_html( self::eur( $sum['month_sold'] ) ); ?></td></tr>
 				</table>
-				<?php endif; ?>
+				<?php if ( empty( $sum['sheet_ok'] ) ) : ?><p class="iamt-hint">Shifrat po përditësohen. Rifresko faqen pas pak minutash.</p><?php endif; ?>
 			</div>
 			<?php if ( $pays ) : ?>
 			<div class="iamt-card">
