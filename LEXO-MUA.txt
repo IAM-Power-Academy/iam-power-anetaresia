@@ -1,0 +1,43 @@
+IAM POWER ANËTARËSIA — UDHËZIM I SHKURTËR
+==========================================
+
+1) PASTRO TË VJETRËN (ChatGPT)
+   - Plugins → çaktivizo dhe FSHI “IAM Power Member Activation Bridge”.
+   - Pas instalimit të plugin-it të ri: IAM Anëtarët → Siguria (ChatGPT)
+     • fshi të gjitha Application Passwords
+     • aktivizo “Çaktivizo plotësisht Application Passwords”
+   - Në ChatGPT fshi GPT-në / Action-in që ka URL-në e iampower.al.
+   - Nëse i ke dhënë ChatGPT-së fjalëkalimin e administratorit, ndryshoje.
+
+2) INSTALIMI
+   Plugins → Add New → Upload Plugin → zgjidh iam-power-anetaresia.zip → Install → Activate.
+   (Kërkon LearnDash aktiv.)
+
+3) KRIJO PAKETAT  (IAM Anëtarët → Paketat)
+   Shembuj:
+   • 40 Ditë Çlirim Shpirtëror — kursi i masterclass-it — 40 ditë
+   • VIP — të gjitha kurset — 365 ditë
+   • IAM Power System — kurset e paketës — 0 (pa afat)
+
+4) AKTIVIZO ANËTARË  (IAM Anëtarët → Aktivizo anëtar)
+   • Një person: email + paketa → “Aktivizo qasjen”
+   • Shumë njëherësh: ngjit listën “email, Emri Mbiemri” nga Google Sheets
+   Përdoruesit e rinj krijohen vetë dhe marrin email për të vendosur fjalëkalimin.
+
+5) KODET  (IAM Anëtarët → Kodet e aktivizimit)
+   Krijo një faqe “Aktivizo” me shortcode-in:   [iam_aktivizo]
+   Faqja e anëtarit (kurset dhe afatet):         [iam_kurset_e_mia]
+
+6) PAGESAT AUTOMATIKE  (IAM Anëtarët → Pagesat (Webhook))
+   Digistore24, Ko-fi dhe Systeme.io — udhëzimet hap pas hapi janë në atë faqe.
+
+7) EKIPI (Skuadra 2026)
+   Cilësimet & Email → “Ekipi” → zgjidh rolin (p.sh. Editor ose Shop manager).
+   Ata mund të aktivizojnë anëtarë, por nuk shohin cilësimet dhe sigurinë.
+
+KUJDES PËR EMAIL-ET
+   Instalo “WP Mail SMTP” dhe lidhe me info@iampower.al, përndryshe email-et mund të bien në spam.
+   Testo te: Cilësimet & Email → “Dërgo email test”.
+
+Skadimet kontrollohen automatikisht çdo orë. Çdo veprim ruhet te “Regjistri”.
+Fshirja e plugin-it NUK fshin të dhënat dhe NUK heq qasjet ekzistuese në LearnDash.

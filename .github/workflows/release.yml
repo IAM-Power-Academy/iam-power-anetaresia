@@ -1,0 +1,44 @@
+name: Publiko versionin
+
+# Krijon automatikisht një version (Release) me ZIP-in e plugin-it
+# sa herë që shtyhet një etiketë si v1.2.0.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kontrollo që versioni përputhet me etiketën
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER=$(grep -m1 -E '^\s*\*\s*Version:' iam-power-anetaresia.php | sed -E 's/.*Version:\s*//' | tr -d '[:space:]')
+          echo "Etiketa: $TAG  Plugin: $VER"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::Versioni në iam-power-anetaresia.php ($VER) nuk përputhet me etiketën ($TAG)"
+            exit 1
+          fi
+
+      - name: Kontrollo sintaksën PHP
+        run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+      - name: Ndërto ZIP-in
+        run: |
+          mkdir -p build/iam-power-anetaresia
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'build' --exclude 'README.md' --exclude '.gitignore' ./ build/iam-power-anetaresia/
+          cd build && zip -rq ../iam-power-anetaresia.zip iam-power-anetaresia
+
+      - name: Krijo Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" iam-power-anetaresia.zip \
+            --title "IAM Power Anëtarësia $GITHUB_REF_NAME" \
+            --notes-file <(git log -1 --pretty=%B)
