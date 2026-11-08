@@ -181,17 +181,33 @@ class IAMP_Sales {
 			return new WP_Error( 'iamp_sheet', 'Fleta nuk është lidhur.' );
 		}
 		$body['secret'] = IAMP_Settings::get( 'sheet_secret' );
+		// Apps Script përgjigjet me 302 drejt script.googleusercontent.com. WordPress-i e ndjek
+		// ridrejtimin duke mbajtur POST-in, dhe Google kthen 400. Prandaj e ndjekim vetë me GET.
 		$r = wp_remote_post(
 			$url,
 			array(
 				'timeout'     => 25,
-				'redirection' => 5,
+				'redirection' => 0,
 				'headers'     => array( 'Content-Type' => 'application/json' ),
 				'body'        => wp_json_encode( $body ),
 			)
 		);
 		if ( is_wp_error( $r ) ) {
 			return $r;
+		}
+		$code = (int) wp_remote_retrieve_response_code( $r );
+		$hops = 0;
+		while ( in_array( $code, array( 301, 302, 303, 307, 308 ), true ) && $hops < 5 ) {
+			$loc = wp_remote_retrieve_header( $r, 'location' );
+			if ( ! $loc ) {
+				break;
+			}
+			$r = wp_remote_get( $loc, array( 'timeout' => 25, 'redirection' => 0 ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$code = (int) wp_remote_retrieve_response_code( $r );
+			$hops++;
 		}
 		$json = json_decode( wp_remote_retrieve_body( $r ), true );
 		if ( ! is_array( $json ) || empty( $json['ok'] ) ) {
