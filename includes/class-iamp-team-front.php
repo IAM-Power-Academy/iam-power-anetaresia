@@ -14,6 +14,7 @@ class IAMP_Team_Front {
 		add_shortcode( 'iam_regjistro_shitjen', array( __CLASS__, 'form' ) );
 		add_shortcode( 'iam_paneli_im', array( __CLASS__, 'panel' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'handle_post' ) );
+		add_action( 'wp_ajax_iamp_check_email', array( __CLASS__, 'ajax_check_email' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'protect' ), 1 );
 		add_action( 'pre_get_posts', array( __CLASS__, 'hide_from_queries' ) );
 		foreach ( array( 'sfwd-courses', 'sfwd-lessons', 'sfwd-topic' ) as $pt ) {
@@ -138,6 +139,10 @@ class IAMP_Team_Front {
 .iamt-switch a{padding:8px 16px;border-radius:20px;background:#fbf6ea;color:#0b1a33;text-decoration:none;border:1px solid #e6dfcf}
 .iamt-switch a.on{background:#0b1a33;color:#fff;border-color:#0b1a33}
 .iamt-b.pending{background:#ffe9c7;color:#9a5b00}.iamt-b.approved{background:#ddf3e4;color:#1d6b35}.iamt-b.rejected{background:#fde3e3;color:#9b1c1c}
+.iamt-emailcheck{margin-top:8px;font-size:14px;border-radius:9px}
+.iamt-emailcheck.good,.iamt-emailcheck.bad,.iamt-emailcheck.wait{padding:10px 12px}
+.iamt-emailcheck.good{background:#ddf3e4;color:#1d6b35}.iamt-emailcheck.bad{background:#fde3e3;color:#9b1c1c}.iamt-emailcheck.wait{background:#f3f0e8;color:#6b7280}
+.iamt-sale-list .iamt-sub{display:block;font-size:12px;color:#6b7280}
 @media(max-width:700px){.iamt-grid,.iamt-kpis{grid-template-columns:1fr 1fr}.iamt td,.iamt th{font-size:12px;padding:7px}}
 </style>';
 	}
@@ -154,6 +159,29 @@ class IAMP_Team_Front {
 
 	private static function eur( $v ) {
 		return '€' . number_format( (float) $v, 2, ',', '.' );
+	}
+
+	/* ---------------- Kontrolli i email-it ---------------- */
+
+	/**
+	 * A ka llogari në iampower.al ky email? Vetëm për Skuadrën; kthen emrin e llogarisë
+	 * që trajneri të shohë nëse është klienti i duhur.
+	 */
+	public static function ajax_check_email() {
+		if ( ! check_ajax_referer( 'iamp_check_email', 'nonce', false ) || ( ! IAMP_Sales::is_team() && ! current_user_can( 'manage_options' ) ) ) {
+			wp_send_json_error( array( 'msg' => 'Sesioni skadoi. Rifresko faqen.' ), 403 );
+		}
+		$email = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : ''; // phpcs:ignore
+		if ( ! is_email( $email ) ) {
+			wp_send_json_success( array( 'found' => false, 'valid' => false ) );
+		}
+		$u = get_user_by( 'email', $email );
+		if ( ! $u ) {
+			wp_send_json_success( array( 'found' => false, 'valid' => true ) );
+		}
+		$name = trim( $u->first_name . ' ' . $u->last_name );
+		$name = $name ? $name : $u->display_name;
+		wp_send_json_success( array( 'found' => true, 'valid' => true, 'name' => $name ) );
 	}
 
 	/* ---------------- Forma ---------------- */
@@ -262,8 +290,9 @@ class IAMP_Team_Front {
 					<div><label>Telefoni</label><input type="text" name="iamp_client_phone" placeholder="+383 ..."></div>
 				</div>
 				<label>Email-i i klientit *</label>
-				<input type="email" name="iamp_client_email" required>
-				<div class="iamt-hint">Email-i me të cilin klienti hyn në iampower.al. Nëse s'ka llogari, krijohet vetë.</div>
+				<input type="email" name="iamp_client_email" id="iamp_client_email" required autocomplete="off">
+				<div class="iamt-hint">Email-i me të cilin klienti hyn në iampower.al. Klienti duhet ta ketë llogarinë para se ta regjistrosh shitjen.</div>
+				<div id="iamp_email_check" class="iamt-emailcheck" aria-live="polite"></div>
 
 				<label>Kursi ose oferta *</label>
 				<select name="iamp_package" required>
@@ -296,14 +325,97 @@ class IAMP_Team_Front {
 
 				<label>Shënime</label>
 				<textarea name="iamp_note" rows="3" placeholder="p.sh. kësti i parë, ofertë ditëlindjeje…"></textarea>
-				<button class="iamt-btn" type="submit" name="iamp_sale_submit" value="1">Regjistro shitjen</button>
+				<button class="iamt-btn" type="submit" name="iamp_sale_submit" value="1" id="iamp_sale_btn">Regjistro shitjen</button>
 			</form>
 		</div>
+		<script>
+		(function () {
+			var input = document.getElementById('iamp_client_email');
+			var box = document.getElementById('iamp_email_check');
+			var btn = document.getElementById('iamp_sale_btn');
+			if (!input || !box || !btn) { return; }
+			var form = input.form, ok = false, timer = null, last = '', seq = 0;
+			var url = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
+			var nonce = <?php echo wp_json_encode( wp_create_nonce( 'iamp_check_email' ) ); ?>;
+			function show(cls, html) { box.className = 'iamt-emailcheck ' + cls; box.innerHTML = html; }
+			function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+			function lock(on) { btn.disabled = on; btn.style.opacity = on ? '.5' : ''; btn.style.cursor = on ? 'not-allowed' : ''; }
+			function check() {
+				var v = input.value.trim().toLowerCase();
+				if (v === last) { return; }
+				last = v; ok = false; lock(true);
+				if (!v) { show('', ''); return; }
+				if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { show('bad', '❌ Email-i nuk është shkruar saktë.'); return; }
+				show('wait', 'Po kontrolloj…');
+				var my = ++seq, fd = new FormData();
+				fd.append('action', 'iamp_check_email'); fd.append('nonce', nonce); fd.append('email', v);
+				fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+					if (my !== seq) { return; }
+					if (!j || !j.success) { show('bad', '❌ ' + esc((j && j.data && j.data.msg) || 'Kontrolli dështoi. Rifresko faqen.')); return; }
+					if (j.data.found) {
+						ok = true; lock(false);
+						show('good', '✅ Llogaria u gjet: <strong>' + esc(j.data.name || v) + '</strong>. Sigurohu që është klienti yt.');
+					} else if (!j.data.valid) {
+						show('bad', '❌ Email-i nuk është shkruar saktë.');
+					} else {
+						show('bad', '❌ Nuk ekziston asnjë llogari në iampower.al me këtë email. Kontrollo email-in me klientin.');
+					}
+				}).catch(function () { if (my === seq) { show('bad', '❌ Kontrolli dështoi. Provo sërish.'); last = ''; } });
+			}
+			input.addEventListener('input', function () { clearTimeout(timer); ok = false; last = ''; lock(true); timer = setTimeout(check, 600); });
+			input.addEventListener('blur', check);
+			form.addEventListener('submit', function (e) { if (!ok) { e.preventDefault(); check(); input.focus(); } });
+			lock(true);
+			if (input.value) { check(); }
+		})();
+		</script>
 		<?php
 		return ob_get_clean();
 	}
 
 	/* ---------------- Paneli im ---------------- */
+
+	/** Çdo shitje e trajnerit me statusin e saj: çfarë u regjistrua dhe a u aktivizua klienti. */
+	private static function sales_list( $uid ) {
+		$list = IAMP_Sales::trainer_sales( $uid );
+		ob_start();
+		echo '<h4 style="margin:22px 0 10px">Çdo shitje</h4>';
+		if ( ! $list['ok'] ) {
+			echo '<p class="iamt-hint">' . esc_html( ! empty( $list['old_script'] ) ? 'Lista e shitjeve do të shfaqet pasi të përditësohet kodi te fleta “Shitjet e Skuadrës 2026”.' : 'Lista po përditësohet. Rifresko faqen pas pak minutash.' ) . '</p>';
+			return ob_get_clean();
+		}
+		if ( ! $list['rows'] ) {
+			echo '<p class="iamt-hint">Nuk ke ende shitje të regjistruara.</p>';
+			return ob_get_clean();
+		}
+		$labels = array(
+			'Pret konfirmim'            => array( 'pending', '🟡 Pret konfirmim nga Mimoza' ),
+			'Konfirmo'                  => array( 'pending', '🟡 Po aktivizohet' ),
+			'Konfirmuar dhe aktivizuar' => array( 'approved', '🟢 Aktivizuar' ),
+			'Refuzo'                    => array( 'rejected', '🔴 Refuzuar' ),
+			'Refuzuar'                  => array( 'rejected', '🔴 Refuzuar' ),
+		);
+		?>
+		<table class="iamt-sale-list">
+			<tr><th>Data</th><th>Klienti</th><th>Kursi</th><th>Shuma</th><th>Statusi</th></tr>
+			<?php foreach ( $list['rows'] as $r ) : ?>
+				<?php
+				$r  = (array) $r;
+				$st = isset( $r['statusi'] ) ? (string) $r['statusi'] : '';
+				$lb = isset( $labels[ $st ] ) ? $labels[ $st ] : array( 'pending', $st );
+				?>
+				<tr>
+					<td><?php echo esc_html( isset( $r['data'] ) ? $r['data'] : '' ); ?></td>
+					<td><?php echo esc_html( isset( $r['klienti'] ) ? $r['klienti'] : '' ); ?><span class="iamt-sub"><?php echo esc_html( isset( $r['email'] ) ? $r['email'] : '' ); ?></span></td>
+					<td><?php echo esc_html( isset( $r['kursi'] ) ? $r['kursi'] : '' ); ?><?php if ( ! empty( $r['bonuset'] ) ) : ?><span class="iamt-sub">+ <?php echo esc_html( $r['bonuset'] ); ?></span><?php endif; ?></td>
+					<td style="white-space:nowrap"><?php echo esc_html( number_format( (float) ( isset( $r['shuma'] ) ? $r['shuma'] : 0 ), 2, ',', '.' ) . ' ' . ( isset( $r['valuta'] ) ? $r['valuta'] : 'EUR' ) ); ?></td>
+					<td><span class="iamt-b <?php echo esc_attr( $lb[0] ); ?>"><?php echo esc_html( $lb[1] ); ?></span></td>
+				</tr>
+			<?php endforeach; ?>
+		</table>
+		<?php
+		return ob_get_clean();
+	}
 
 	public static function panel() {
 		$g = self::guard();
@@ -357,6 +469,7 @@ class IAMP_Team_Front {
 					<tr><td>Këtë muaj</td><td style="text-align:right"><?php echo (int) $sum['month_n']; ?> · <?php echo esc_html( self::eur( $sum['month_sold'] ) ); ?></td></tr>
 				</table>
 				<?php if ( empty( $sum['sheet_ok'] ) ) : ?><p class="iamt-hint">Shifrat po përditësohen. Rifresko faqen pas pak minutash.</p><?php endif; ?>
+				<?php echo self::sales_list( $uid ); // phpcs:ignore ?>
 			</div>
 			<?php if ( $pays ) : ?>
 			<div class="iamt-card">

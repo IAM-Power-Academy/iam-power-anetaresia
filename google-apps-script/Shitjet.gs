@@ -101,6 +101,9 @@ function doPost(e) {
   if (d.action === 'summary') {
     return json_(permbledhja_());
   }
+  if (d.action === 'list') {
+    return json_(lista_(d.trajneri_id));
+  }
   var lock = LockService.getScriptLock();
   lock.waitLock(25000);
   try {
@@ -295,6 +298,31 @@ function permbledhja_() {
     return { m: k, n: months[k].n, sold: Math.round(months[k].sold * 100) / 100, bonus: Math.round(months[k].bonus * 100) / 100 };
   });
   return { ok: true, trainers: trainers, months: mlist, pending: pending, days: days };
+}
+
+/** Shitjet e një trajneri, për "Shitjet e mia" te paneli i tij (më të rejat sipër, deri në 200). */
+function lista_(tid) {
+  var sh = fleta_();
+  var n = sh.getLastRow() - 1;
+  var rows = n > 0 ? sh.getRange(2, 1, n, KOLONAT.length).getValues() : [];
+  var out = [];
+  rows.forEach(function (r) {
+    if (r[0] === '' || r[0] === null || String(r[K['Trajneri ID'] - 1]) !== String(tid)) { return; }
+    var data = r[K['Data'] - 1];
+    out.push({
+      id: r[K['ID'] - 1],
+      data: data instanceof Date ? Utilities.formatDate(data, 'Europe/Belgrade', 'dd.MM.yyyy HH:mm') : String(data),
+      klienti: String(r[K['Klienti'] - 1]),
+      email: String(r[K['Email'] - 1]),
+      kursi: String(r[K['Kursi / oferta'] - 1]),
+      bonuset: String(r[K['Bonus falas shtesë'] - 1]),
+      shuma: Number(r[K['Shuma'] - 1]) || 0,
+      valuta: String(r[K['Valuta'] - 1] || 'EUR'),
+      statusi: String(r[K['Statusi'] - 1])
+    });
+  });
+  out.reverse();
+  return { ok: true, rows: out.slice(0, 200) };
 }
 
 /** Fleta e vogël "Presin konfirmim" (pa të dhëna teknike). */

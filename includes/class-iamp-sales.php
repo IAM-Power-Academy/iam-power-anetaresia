@@ -113,6 +113,9 @@ class IAMP_Sales {
 		if ( ! is_email( $data['client_email'] ) ) {
 			return new WP_Error( 'iamp_sale', 'Email-i i klientit nuk është i saktë.' );
 		}
+		if ( ! get_user_by( 'email', $data['client_email'] ) ) {
+			return new WP_Error( 'iamp_sale', 'Nuk ekziston asnjë llogari në iampower.al me email-in ' . $data['client_email'] . '. Kontrollo email-in me klientin. Shitja nuk u regjistrua.' );
+		}
 		if ( ! self::sheet_ready() ) {
 			return new WP_Error( 'iamp_sale', 'Regjistrimi i shitjeve nuk është lidhur ende. Njofto Mimozën.' );
 		}
@@ -300,6 +303,36 @@ class IAMP_Sales {
 
 	public static function flush_summary() {
 		delete_transient( 'iamp_sheet_sum' );
+		update_option( 'iamp_sheet_list_v', time(), false ); // Lista e shitjeve të çdo trajneri lexohet sërish.
+	}
+
+	/**
+	 * Shitjet e një trajneri, një nga një, të lexuara nga fleta (ruhen 10 minuta).
+	 *
+	 * @return array{rows:array,ok:bool,old_script?:bool}
+	 */
+	public static function trainer_sales( $trainer_id ) {
+		$tid = (int) $trainer_id;
+		$key = 'iamp_sl_' . $tid . '_' . (int) get_option( 'iamp_sheet_list_v', 0 );
+		$c   = get_transient( $key );
+		if ( is_array( $c ) ) {
+			return $c;
+		}
+		if ( ! self::sheet_ready() ) {
+			return array( 'rows' => array(), 'ok' => false );
+		}
+		$r = self::send( array( 'action' => 'list', 'trajneri_id' => $tid ) );
+		if ( is_wp_error( $r ) ) {
+			$out = array( 'rows' => array(), 'ok' => false );
+			if ( false !== strpos( $r->get_error_message(), 'panjohur' ) ) {
+				$out['old_script'] = true; // Kodi i fletës nuk është përditësuar ende.
+			}
+			set_transient( $key, $out, 2 * MINUTE_IN_SECONDS );
+			return $out;
+		}
+		$out = array( 'rows' => isset( $r['rows'] ) ? (array) $r['rows'] : array(), 'ok' => true );
+		set_transient( $key, $out, 10 * MINUTE_IN_SECONDS );
+		return $out;
 	}
 
 	/**
