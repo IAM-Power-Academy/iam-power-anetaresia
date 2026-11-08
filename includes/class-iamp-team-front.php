@@ -14,6 +14,93 @@ class IAMP_Team_Front {
 		add_shortcode( 'iam_regjistro_shitjen', array( __CLASS__, 'form' ) );
 		add_shortcode( 'iam_paneli_im', array( __CLASS__, 'panel' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'handle_post' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'protect' ), 1 );
+		add_action( 'pre_get_posts', array( __CLASS__, 'hide_from_queries' ) );
+		foreach ( array( 'sfwd-courses', 'sfwd-lessons', 'sfwd-topic' ) as $pt ) {
+			add_filter( 'rest_prepare_' . $pt, array( __CLASS__, 'hide_from_rest' ), 10, 2 );
+		}
+		add_filter( 'wp_sitemaps_posts_query_args', array( __CLASS__, 'hide_from_sitemap' ) );
+	}
+
+	/**
+	 * ID-të e kursit të Skuadrës dhe të mësimeve/temave të tij.
+	 */
+	public static function protected_ids() {
+		static $ids = null;
+		if ( null !== $ids ) {
+			return $ids;
+		}
+		$ids    = array();
+		$course = (int) get_option( 'iamp_team_course' );
+		if ( ! $course ) {
+			return $ids;
+		}
+		$ids[] = $course;
+		foreach ( (array) get_option( 'iamp_team_lessons', array() ) as $l ) {
+			if ( $l ) {
+				$ids[] = (int) $l;
+			}
+		}
+		global $wpdb;
+		$children = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = 'course_id' AND meta_value = %d", $course ) ); // phpcs:ignore
+		foreach ( $children as $c ) {
+			$ids[] = (int) $c;
+		}
+		$ids = array_values( array_unique( $ids ) );
+		return $ids;
+	}
+
+	public static function can_see() {
+		return is_user_logged_in() && ( IAMP_Sales::is_team() || current_user_can( 'manage_options' ) );
+	}
+
+	/**
+	 * Kush nuk është në Skuadër: faqja nuk ekziston (404). Nuk shihet as titulli, as çmimi, as mësimet.
+	 */
+	public static function protect() {
+		if ( is_admin() || self::can_see() || ! is_singular() ) {
+			return;
+		}
+		$id = (int) get_queried_object_id();
+		if ( $id && in_array( $id, self::protected_ids(), true ) ) {
+			global $wp_query;
+			$wp_query->set_404();
+			status_header( 404 );
+			nocache_headers();
+		}
+	}
+
+	public static function hide_from_queries( $q ) {
+		if ( is_admin() || self::can_see() ) {
+			return;
+		}
+		$ids = self::protected_ids();
+		if ( ! $ids ) {
+			return;
+		}
+		if ( $q->is_singular() && ! $q->is_main_query() ) {
+			return;
+		}
+		if ( $q->is_main_query() && $q->is_singular() ) {
+			return; // Trajtohet nga protect() me 404.
+		}
+		$not = (array) $q->get( 'post__not_in' );
+		$q->set( 'post__not_in', array_merge( $not, $ids ) );
+	}
+
+	public static function hide_from_rest( $response, $post ) {
+		if ( self::can_see() ) {
+			return $response;
+		}
+		if ( in_array( (int) $post->ID, self::protected_ids(), true ) ) {
+			return new WP_Error( 'rest_post_invalid_id', 'Nuk u gjet.', array( 'status' => 404 ) );
+		}
+		return $response;
+	}
+
+	public static function hide_from_sitemap( $args ) {
+		$args['post__not_in'] = array_merge( isset( $args['post__not_in'] ) ? (array) $args['post__not_in'] : array(), self::protected_ids() );
+		return $args;
 	}
 
 	private static function css() {
