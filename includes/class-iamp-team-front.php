@@ -323,9 +323,6 @@ class IAMP_Team_Front {
 		$pays  = IAMP_Sales::payouts( $uid );
 		ob_start();
 		echo self::css(); // phpcs:ignore
-		if ( class_exists( 'IAMP_Admin_Stats' ) ) {
-			echo IAMP_Admin_Stats::front_block(); // phpcs:ignore -- vetëm për administratoren.
-		}
 		?>
 		<div class="iamt">
 			<?php if ( current_user_can( 'manage_options' ) ) : ?>
