@@ -214,6 +214,15 @@ JS;
 			'iamp_app_featured',
 			array(
 				array(
+					'match' => 'Nisja Jote',
+					'title' => 'Nisja jote në IAM Power',
+					'img'   => IAMP_URL . 'assets/app/nisja-jote-falas.jpg',
+					'url'   => 'https://iampower.al/courses/trajnimet-falas-per-vetezhvillim/',
+					'cta'   => 'Fillo falas',
+					'head'  => '🌱 Fillo falas',
+					'sub'   => 'Sfida 21-ditore për transformim',
+				),
+				array(
 					'match' => 'Zemra e Martes',
 					'title' => 'Zemra e Martesës',
 					'img'   => IAMP_URL . 'assets/app/zemra-e-martes.jpg',
@@ -420,6 +429,7 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 		<h1>IAM Power Academy</h1>
 		<p>Kyçu për të hapur bibliotekën me kurset e tua.</p>
 		<a class="btn" href="<?php echo esc_url( $login ); ?>">Hyr</a>
+		<p style="margin:18px 0 0"><a href="<?php echo esc_url( home_url( '/regjistrimi/' ) ); ?>" style="color:#c9a14a;text-decoration:underline">Nuk ke llogari? Regjistrohu falas</a></p>
 		<?php echo self::whatsapp_card(); // phpcs:ignore ?>
 		<button class="install" id="inst" type="button" style="margin-top:26px">📲 Shkarko aplikacionin</button>
 	</div>
