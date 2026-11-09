@@ -130,6 +130,7 @@ class IAMP_Admin_Team {
 			array( 'Regjistro shitjen', '[iam_regjistro_shitjen]', 1 ),
 			array( 'Paneli im', '[iam_paneli_im]', 2 ),
 			array( 'Linqet e punës', $links, 3 ),
+			array( 'Kërkesa për aktivizim', '[iam_kerkesat_aktivizim]', 4 ),
 		);
 		$ids = (array) get_option( 'iamp_team_lessons', array() );
 		foreach ( $lessons as $i => $l ) {
@@ -206,7 +207,7 @@ class IAMP_Admin_Team {
 		$course = (int) get_option( 'iamp_team_course' );
 		echo '<div class="iamp-card"><h2>Hapësira e Skuadrës në LearnDash</h2>';
 		if ( $course && get_post( $course ) ) {
-			echo '<p>Kursi privat: <a href="' . esc_url( get_permalink( $course ) ) . '" target="_blank"><strong>Skuadra IAM Power</strong></a>, me mësimet "Regjistro shitjen", "Paneli im" dhe "Linqet e punës". Hyjnë vetëm anëtarët e Skuadrës.</p>';
+			echo '<p>Kursi privat: <a href="' . esc_url( get_permalink( $course ) ) . '" target="_blank"><strong>Skuadra IAM Power</strong></a>, me mësimet "Regjistro shitjen", "Paneli im", "Linqet e punës" dhe "Kërkesa për aktivizim" (vetëm për administratorin). Hyjnë vetëm anëtarët e Skuadrës.</p>';
 			$ids = (array) get_option( 'iamp_team_lessons', array() );
 			if ( ! empty( $ids[2] ) ) {
 				echo '<p><a class="button" href="' . esc_url( get_edit_post_link( $ids[2] ) ) . '">Ndrysho linqet e punës</a></p>';

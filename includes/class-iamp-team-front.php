@@ -7,12 +7,15 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Faqet e Skuadrës brenda kursit privat LearnDash:
  *  [iam_regjistro_shitjen]  — forma e shitjes
  *  [iam_paneli_im]          — shitjet dhe bonuset e trajnerit të kyçur
+ *  [iam_kerkesat_aktivizim] — vetëm administratori: kërkesat për aktivizim me butonin Konfirmo
  */
 class IAMP_Team_Front {
 
 	public static function init() {
 		add_shortcode( 'iam_regjistro_shitjen', array( __CLASS__, 'form' ) );
 		add_shortcode( 'iam_paneli_im', array( __CLASS__, 'panel' ) );
+		add_shortcode( 'iam_kerkesat_aktivizim', array( __CLASS__, 'requests' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'handle_decision' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'handle_post' ) );
 		add_action( 'wp_ajax_iamp_check_email', array( __CLASS__, 'ajax_check_email' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'protect' ), 1 );
@@ -388,6 +391,70 @@ class IAMP_Team_Front {
 			if (input.value) { check(); }
 		})();
 		</script>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ---------------- Kërkesat për aktivizim (vetëm administratori) ---------------- */
+
+	public static function handle_decision() {
+		if ( empty( $_POST['iamp_decide'] ) || ! is_user_logged_in() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$key = 'iamp_sale_msg_' . get_current_user_id();
+		if ( ! isset( $_POST['iamp_decide_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['iamp_decide_nonce'] ) ), 'iamp_decide' ) ) {
+			set_transient( $key, array( 'err', 'Sesioni skadoi. Provo sërish.' ), 120 );
+			return;
+		}
+		$id       = absint( $_POST['iamp_sale_id'] ?? 0 ); // phpcs:ignore
+		$decision = 'reject' === ( $_POST['iamp_decide'] ?? '' ) ? 'reject' : 'approve'; // phpcs:ignore
+		$res      = IAMP_Sales::decide( $id, $decision );
+		if ( is_wp_error( $res ) ) {
+			set_transient( $key, array( 'err', $res->get_error_message() ), 120 );
+		} else {
+			set_transient( $key, array( 'ok', 'approve' === $decision ? 'Shitja #' . $id . ' u konfirmua dhe klienti u aktivizua.' : 'Shitja #' . $id . ' u refuzua.' ), 120 );
+		}
+		$back = isset( $_POST['iamp_return'] ) ? esc_url_raw( wp_unslash( $_POST['iamp_return'] ) ) : home_url( '/' ); // phpcs:ignore
+		wp_safe_redirect( $back );
+		exit;
+	}
+
+	public static function requests() {
+		if ( ! is_user_logged_in() || ! current_user_can( 'manage_options' ) ) {
+			return self::css() . '<div class="iamt"><div class="iamt-msg iamt-err">Kjo faqe është vetëm për administratorin.</div></div>';
+		}
+		$rows = IAMP_Sales::pending_requests();
+		ob_start();
+		echo self::css(); // phpcs:ignore
+		?>
+		<div class="iamt">
+			<div class="iamt-head"><h2>Kërkesa për aktivizim</h2><p>Shitjet që presin konfirmimin tënd. Kliko “Konfirmo” dhe klienti aktivizohet menjëherë.</p></div>
+			<?php echo self::message(); // phpcs:ignore ?>
+			<?php if ( is_wp_error( $rows ) ) : ?>
+				<div class="iamt-msg iamt-err"><?php echo esc_html( $rows->get_error_message() ); ?></div>
+			<?php elseif ( ! $rows ) : ?>
+				<div class="iamt-card"><p style="margin:0">Nuk ka kërkesa që presin konfirmim. ✅</p></div>
+			<?php else : ?>
+				<?php foreach ( $rows as $r ) : ?>
+					<?php $r = (array) $r; ?>
+					<form class="iamt-card" method="post">
+						<?php wp_nonce_field( 'iamp_decide', 'iamp_decide_nonce' ); ?>
+						<input type="hidden" name="iamp_sale_id" value="<?php echo (int) $r['id']; ?>">
+						<input type="hidden" name="iamp_return" value="<?php echo esc_url( get_permalink() ); ?>">
+						<h3 style="margin:0 0 6px">#<?php echo (int) $r['id']; ?> · <?php echo esc_html( $r['klienti'] ); ?> <span class="iamt-b pending">🟡 Pret konfirmim</span></h3>
+						<table>
+							<tr><td style="width:170px"><strong>Email</strong></td><td><?php echo esc_html( $r['email'] ); ?><?php echo $r['telefoni'] ? ' · ' . esc_html( $r['telefoni'] ) : ''; ?></td></tr>
+							<tr><td><strong>Kursi / oferta</strong></td><td><?php echo esc_html( $r['kursi'] ); ?><?php echo $r['bonuset'] ? '<span class="iamt-sub">+ ' . esc_html( $r['bonuset'] ) . '</span>' : ''; ?></td></tr>
+							<tr><td><strong>Paguar</strong></td><td><?php echo esc_html( number_format( (float) $r['shuma'], 2, ',', '.' ) . ' ' . $r['valuta'] . ' · ' . $r['pagesa'] ); ?><?php echo $r['referenca'] ? ' · ref. ' . esc_html( $r['referenca'] ) : ''; ?></td></tr>
+							<tr><td><strong>Trajneri</strong></td><td><?php echo esc_html( $r['trajneri'] ); ?> · <?php echo esc_html( $r['data'] ); ?></td></tr>
+							<?php if ( ! empty( $r['shenime'] ) ) : ?><tr><td><strong>Shënime</strong></td><td><?php echo esc_html( $r['shenime'] ); ?></td></tr><?php endif; ?>
+						</table>
+						<button class="iamt-btn" type="submit" name="iamp_decide" value="approve">✅ Konfirmo</button>
+						<button class="iamt-btn" type="submit" name="iamp_decide" value="reject" style="background:#fde3e3;color:#9b1c1c;margin-left:8px" onclick="return confirm('Të refuzohet kjo shitje?');">Refuzo</button>
+					</form>
+				<?php endforeach; ?>
+			<?php endif; ?>
+		</div>
 		<?php
 		return ob_get_clean();
 	}

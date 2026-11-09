@@ -104,6 +104,9 @@ function doPost(e) {
   if (d.action === 'list') {
     return json_(lista_(d.trajneri_id));
   }
+  if (d.action === 'pending') {
+    return json_(pritje_());
+  }
   var lock = LockService.getScriptLock();
   lock.waitLock(25000);
   try {
@@ -122,6 +125,12 @@ function doPost(e) {
         }
       }
       shkruaj_(sh, d);
+    } else if (d.action === 'decide') {
+      var at = gjej_(sh, d.id);
+      if (at < 0) { return json_({ ok: false, error: 'Shitja nuk u gjet te fleta.' }); }
+      sh.getRange(at, K['Statusi']).setValue(d.vendimi === 'ok' ? ST_OK : ST_NO); // Nuk ndez triggerin kurNdryshohet.
+      sh.getRange(at, K['Aktivizuar / vendosur më']).setValue(Utilities.formatDate(new Date(), 'Europe/Belgrade', 'dd.MM.yyyy HH:mm'));
+      ngjyros_(sh, at);
     } else if (d.action === 'import') {
       (d.rows || []).forEach(function (r) { shkruaj_(sh, r); });
     } else {
@@ -323,6 +332,37 @@ function lista_(tid) {
   });
   out.reverse();
   return { ok: true, rows: out.slice(0, 200) };
+}
+
+/** Të gjitha kërkesat që presin konfirmim (për mësimin "Kërkesa për aktivizim" të administratorit). */
+function pritje_() {
+  var sh = fleta_();
+  var n = sh.getLastRow() - 1;
+  var rows = n > 0 ? sh.getRange(2, 1, n, KOLONAT.length).getValues() : [];
+  var out = [];
+  rows.forEach(function (r) {
+    var st = String(r[K['Statusi'] - 1]);
+    if (r[0] === '' || r[0] === null || (st !== ST_PRET && st !== ST_KONFIRMO)) { return; }
+    var data = r[K['Data'] - 1];
+    out.push({
+      id: r[K['ID'] - 1],
+      data: data instanceof Date ? Utilities.formatDate(data, 'Europe/Belgrade', 'dd.MM.yyyy HH:mm') : String(data),
+      trajneri: String(r[K['Trajneri'] - 1]),
+      klienti: String(r[K['Klienti'] - 1]),
+      email: String(r[K['Email'] - 1]),
+      telefoni: String(r[K['Telefoni'] - 1]),
+      kursi: String(r[K['Kursi / oferta'] - 1]),
+      bonuset: String(r[K['Bonus falas shtesë'] - 1]),
+      shuma: Number(r[K['Shuma'] - 1]) || 0,
+      valuta: String(r[K['Valuta'] - 1] || 'EUR'),
+      pagesa: String(r[K['Mënyra e pagesës'] - 1]),
+      referenca: String(r[K['Referenca'] - 1]),
+      shenime: String(r[K['Shënime të trajneres'] - 1]),
+      paketa_id: r[K['Paketa ID'] - 1],
+      kurset_id: String(r[K['Kurset ID'] - 1])
+    });
+  });
+  return { ok: true, rows: out };
 }
 
 /** Fleta e vogël "Presin konfirmim" (pa të dhëna teknike). */

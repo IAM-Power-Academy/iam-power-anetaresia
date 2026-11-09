@@ -268,18 +268,34 @@ class IAMP_Sales {
 		if ( 'approve' !== $action ) {
 			return new WP_REST_Response( array( 'ok' => false, 'error' => 'Veprim i panjohur.' ), 400 );
 		}
+		$res = self::activate( $d );
+		self::flush_summary();
+		if ( is_wp_error( $res ) ) {
+			return new WP_REST_Response( array( 'ok' => false, 'error' => $res->get_error_message() ) );
+		}
+		return new WP_REST_Response( array( 'ok' => true, 'membership_id' => (int) $res['membership_id'], 'duplicate' => ! empty( $res['duplicate'] ) ) );
+	}
+
+	/**
+	 * Aktivizon klientin e një shitjeje (përdoret nga fleta dhe nga mësimi "Kërkesa për aktivizim").
+	 * Është e sigurt të thirret dy herë: referenca "shitje:ID" parandalon dublimin.
+	 *
+	 * @param array $d Rreshti i shitjes (email, klienti, paketa_id, kurset_id, id, trajneri).
+	 * @return array|WP_Error
+	 */
+	public static function activate( $d ) {
 		$email = sanitize_email( isset( $d['email'] ) ? $d['email'] : '' );
 		if ( ! is_email( $email ) ) {
-			return new WP_REST_Response( array( 'ok' => false, 'error' => 'Email-i i klientit nuk është i saktë.' ) );
+			return new WP_Error( 'iamp_sale', 'Email-i i klientit nuk është i saktë.' );
 		}
 		$pkg = IAMP_DB::get_package( isset( $d['paketa_id'] ) ? (int) $d['paketa_id'] : 0 );
 		if ( ! $pkg ) {
-			return new WP_REST_Response( array( 'ok' => false, 'error' => 'Paketa nuk u gjet në webfaqe.' ) );
+			return new WP_Error( 'iamp_sale', 'Paketa nuk u gjet në webfaqe.' );
 		}
 		$name    = trim( sanitize_text_field( isset( $d['klienti'] ) ? $d['klienti'] : '' ) );
 		$parts   = explode( ' ', $name, 2 );
 		$courses = array_filter( array_map( 'absint', explode( ',', isset( $d['kurset_id'] ) ? (string) $d['kurset_id'] : '' ) ) );
-		$res     = IAMP_Access::grant(
+		return IAMP_Access::grant(
 			array(
 				'email'        => $email,
 				'first_name'   => $parts[0],
@@ -292,11 +308,58 @@ class IAMP_Sales {
 				'send_email'   => true,
 			)
 		);
-		self::flush_summary();
-		if ( is_wp_error( $res ) ) {
-			return new WP_REST_Response( array( 'ok' => false, 'error' => $res->get_error_message() ) );
+	}
+
+	/** Kërkesat që presin konfirmim, direkt nga fleta (pa cache, gjithmonë të freskëta). */
+	public static function pending_requests() {
+		if ( ! self::sheet_ready() ) {
+			return new WP_Error( 'iamp_sheet', 'Fleta nuk është lidhur.' );
 		}
-		return new WP_REST_Response( array( 'ok' => true, 'membership_id' => (int) $res['membership_id'], 'duplicate' => ! empty( $res['duplicate'] ) ) );
+		$r = self::send( array( 'action' => 'pending' ) );
+		if ( is_wp_error( $r ) ) {
+			if ( false !== strpos( $r->get_error_message(), 'panjohur' ) ) {
+				return new WP_Error( 'iamp_sheet', 'Kodi i fletës duhet përditësuar (Shitjet.gs → Deploy → New version).' );
+			}
+			return $r;
+		}
+		return isset( $r['rows'] ) ? (array) $r['rows'] : array();
+	}
+
+	/**
+	 * Konfirmon ose refuzon një kërkesë nga mësimi i administratorit.
+	 *
+	 * @param string $decision 'approve' ose 'reject'.
+	 * @return true|WP_Error
+	 */
+	public static function decide( $id, $decision ) {
+		$id   = absint( $id );
+		$rows = self::pending_requests();
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+		$row = null;
+		foreach ( $rows as $r ) {
+			if ( (int) $r['id'] === $id ) {
+				$row = (array) $r;
+				break;
+			}
+		}
+		if ( ! $row ) {
+			return new WP_Error( 'iamp_sale', 'Kjo kërkesë nuk pret më konfirmim (ndoshta u trajtua).' );
+		}
+		if ( 'approve' === $decision ) {
+			$res = self::activate( $row );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+		}
+		$mark = self::send( array( 'action' => 'decide', 'id' => $id, 'vendimi' => 'approve' === $decision ? 'ok' : 'no' ) );
+		self::flush_summary();
+		if ( is_wp_error( $mark ) ) {
+			return new WP_Error( 'iamp_sale', 'Klienti u aktivizua, por fleta nuk u përditësua: ' . $mark->get_error_message() . ' Vendos “Konfirmo” te fleta dorazi.' );
+		}
+		IAMP_Log::add( 'team', 0, ( 'approve' === $decision ? 'Konfirmuar' : 'Refuzuar' ) . ' shitja #' . $id . ' nga mësimi i administratorit' );
+		return true;
 	}
 
 	/* ---------------- Përmbledhjet nga fleta ---------------- */
