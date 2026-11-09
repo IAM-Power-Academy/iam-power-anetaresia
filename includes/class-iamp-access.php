@@ -117,6 +117,11 @@ class IAMP_Access {
 			$existing = IAMP_DB::find_by_ref( $args['external_ref'] );
 			foreach ( $existing as $row ) {
 				if ( 'active' === $row->status && (int) $row->package_id === (int) $args['package_id'] ) {
+					// Aktivizim i përsëritur: sigurohu që edhe kurset bonus janë hapur (veprim i sigurt).
+					$extra = array_values( array_filter( array_map( 'absint', (array) $args['courses'] ) ) );
+					if ( $extra ) {
+						self::apply_learndash( (int) $row->user_id, $extra, array(), false );
+					}
 					return array( 'membership_id' => (int) $row->id, 'user_id' => (int) $row->user_id, 'duplicate' => true, 'created' => false );
 				}
 			}

@@ -123,7 +123,7 @@ class IAMP_Sales {
 		$extras = array();
 		$ids    = array_filter( array_map( 'absint', (array) $data['extra_courses'] ) );
 		foreach ( $ids as $cid ) {
-			$extras[] = get_the_title( $cid );
+			$extras[] = html_entity_decode( wp_strip_all_tags( get_the_title( $cid ) ), ENT_QUOTES, 'UTF-8' );
 		}
 		$id   = self::next_id();
 		$body = array(
@@ -295,6 +295,12 @@ class IAMP_Sales {
 		$name    = trim( sanitize_text_field( isset( $d['klienti'] ) ? $d['klienti'] : '' ) );
 		$parts   = explode( ' ', $name, 2 );
 		$courses = array_filter( array_map( 'absint', explode( ',', isset( $d['kurset_id'] ) ? (string) $d['kurset_id'] : '' ) ) );
+		// Kurset bonus gjenden edhe sipas titullit (kolona "Bonus falas shtesë"), sepse Google Sheets
+		// ndonjëherë e kthen "12,34" në numër dhe humbet ID-të.
+		$courses = array_merge( array_filter( $courses, function ( $c ) {
+			return 'sfwd-courses' === get_post_type( $c );
+		} ), self::courses_from_titles( isset( $d['bonuset'] ) ? (string) $d['bonuset'] : '' ) );
+		$courses = array_values( array_unique( $courses ) );
 		return IAMP_Access::grant(
 			array(
 				'email'        => $email,
@@ -308,6 +314,39 @@ class IAMP_Sales {
 				'send_email'   => true,
 			)
 		);
+	}
+
+	/** Tekst i krahasueshëm: pa kode HTML, pa thonjëza të lakuara, shkronja të vogla. */
+	private static function norm( $t ) {
+		$t = html_entity_decode( wp_strip_all_tags( (string) $t ), ENT_QUOTES, 'UTF-8' );
+		$t = str_replace( array( '“', '”', '„', '‘', '’' ), array( '"', '"', '"', "'", "'" ), $t );
+		return trim( preg_replace( '/\s+/u', ' ', mb_strtolower( $t ) ) );
+	}
+
+	/** ID-të e kurseve që titujt e tyre shfaqen te teksti i bonuseve (titujt më të gjatë i përputh i pari). */
+	public static function courses_from_titles( $text ) {
+		$out  = array();
+		$text = self::norm( $text );
+		if ( '' === $text ) {
+			return $out;
+		}
+		$list = array();
+		foreach ( IAMP_Access::courses() as $c ) {
+			$t = self::norm( $c->post_title );
+			if ( '' !== $t ) {
+				$list[] = array( (int) $c->ID, $t );
+			}
+		}
+		usort( $list, function ( $x, $y ) {
+			return mb_strlen( $y[1] ) - mb_strlen( $x[1] );
+		} );
+		foreach ( $list as $it ) {
+			if ( false !== mb_strpos( $text, $it[1] ) ) {
+				$out[] = $it[0];
+				$text  = str_replace( $it[1], ' ', $text ); // Mos e numëro dy herë brenda një titulli më të gjatë.
+			}
+		}
+		return $out;
 	}
 
 	/** Kërkesat që presin konfirmim, direkt nga fleta (pa cache, gjithmonë të freskëta). */
@@ -541,7 +580,7 @@ class IAMP_Sales {
 			$pkg    = IAMP_DB::get_package( $s->package_id );
 			$extras = array();
 			foreach ( IAMP_DB::string_to_ids( $s->extra_courses ) as $cid ) {
-				$extras[] = get_the_title( $cid );
+				$extras[] = html_entity_decode( wp_strip_all_tags( get_the_title( $cid ) ), ENT_QUOTES, 'UTF-8' );
 			}
 			$out[] = array(
 				'id'            => (int) $s->id,

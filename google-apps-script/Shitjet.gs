@@ -63,6 +63,7 @@ function fleta_() {
   sh.setFrozenColumns(4);
   sh.getRange('B:B').setNumberFormat('@');
   sh.getRange('M:M').setNumberFormat('@');
+  sh.getRange(1, K['Kurset ID'], sh.getMaxRows(), 1).setNumberFormat('@'); // "12,34" mos të bëhet numër
   sh.getRange('I:I').setNumberFormat('#,##0.00');
   sh.getRange('O:O').setNumberFormat('0%');
   sh.getRange('P:P').setNumberFormat('€#,##0.00');
