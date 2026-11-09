@@ -69,7 +69,7 @@ class IAMP_Admin_Leads {
 		$list_url = ! empty( $ids[4] ) ? get_permalink( (int) $ids[4] ) : '';
 		$tot_w    = 0;
 		foreach ( IAMP_Leads::trainers() as $name ) {
-			$tot_w += isset( $weights[ strtolower( trim( $name ) ) ] ) ? (float) $weights[ strtolower( trim( $name ) ) ] : 1;
+			$tot_w += isset( $weights[ strtolower( trim( $name ) ) ] ) ? (float) $weights[ strtolower( trim( $name ) ) ] : 0;
 		}
 
 		$n = get_transient( 'iamp_notice_' . get_current_user_id() );
@@ -105,10 +105,10 @@ class IAMP_Admin_Leads {
 		echo '<div class="card" style="max-width:none"><h2>Cilësimet e ndarjes</h2>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="iamp_leads_save">';
 		wp_nonce_field( 'iamp_leads_save' );
-		echo '<p>Kontaktet pa trajnere aktive ndahen sipas peshave. Kontaktet që kanë sponsor aktiv mbeten te ai.</p><table class="form-table">';
+		echo '<p>Kontaktet pa trajnere aktive ndahen sipas peshave. Pesha 0 = nuk merr kontakte të reja (vendose 0 për Avni, Mimozën ose llogari testimi). Kontaktet që kanë sponsor aktiv mbeten te ai.</p><table class="form-table">';
 		foreach ( IAMP_Leads::trainers() as $name ) {
 			$k = strtolower( trim( $name ) );
-			$w = isset( $weights[ $k ] ) ? (float) $weights[ $k ] : 1;
+			$w = isset( $weights[ $k ] ) ? (float) $weights[ $k ] : 0;
 			$p = $tot_w > 0 ? round( 100 * $w / $tot_w, 1 ) : 0;
 			echo '<tr><th>' . esc_html( $name ) . '</th><td><input type="number" step="0.5" min="0" name="w[' . esc_attr( $k ) . ']" value="' . esc_attr( $w ) . '" style="width:80px"> <span class="description">≈ ' . esc_html( $p ) . '% e kontakteve të reja</span></td></tr>';
 		}

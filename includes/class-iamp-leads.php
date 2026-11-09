@@ -149,7 +149,7 @@ class IAMP_Leads {
 		return IAMP_Sales::team();
 	}
 
-	/** Pesha e ndarjes për një trajnere (sipas emrit); default 1. */
+	/** Pesha e ndarjes për një trajnere (sipas emrit); pa peshë = 0. */
 	public static function weights() {
 		$w = IAMP_Settings::get( 'lead_weights' );
 		if ( ! is_array( $w ) || ! $w ) {
@@ -161,7 +161,7 @@ class IAMP_Leads {
 	private static function weight_for( $name ) {
 		$w = self::weights();
 		$k = strtolower( trim( $name ) );
-		return isset( $w[ $k ] ) ? max( 0.0, (float) $w[ $k ] ) : 1.0;
+		return isset( $w[ $k ] ) ? max( 0.0, (float) $w[ $k ] ) : 0.0; // Pa peshë = nuk merr kontakte të reja (p.sh. Avni, Mimoza).
 	}
 
 	/** Gjen user_id të trajneres sipas emrit (p.sh. "Teuta"). */
