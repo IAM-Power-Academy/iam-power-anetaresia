@@ -23,6 +23,7 @@ class IAMP_App {
 		add_filter( 'query_vars', array( __CLASS__, 'query_vars' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'serve' ), 0 );
 		add_shortcode( 'iam_shkarko_app', array( __CLASS__, 'install_shortcode' ) );
+		add_shortcode( 'iam_posteret', array( __CLASS__, 'posters_shortcode' ) );
 		add_action( 'wp_footer', array( __CLASS__, 'floating_button' ) );
 		add_action( 'wp_head', array( __CLASS__, 'head_links' ), 1 );
 	}
@@ -271,10 +272,11 @@ JS;
 				),
 			)
 		);
-		$out = array();
+		$out   = array();
+		$owned = $uid ? self::owned_course_ids( $uid ) : array();
 		foreach ( (array) $items as $it ) {
 			$has = false;
-			foreach ( self::owned_course_ids( $uid ) as $cid ) {
+			foreach ( $owned as $cid ) {
 				if ( ! empty( $it['match'] ) && false !== stripos( remove_accents( get_the_title( $cid ) ), remove_accents( $it['match'] ) ) ) {
 					$has = true;
 					break;
@@ -335,7 +337,7 @@ JS;
 		$lib    = $logged ? self::library( $uid ) : array();
 		$owned  = wp_list_pluck( $lib, 'id' );
 		$store  = $logged ? self::store( $owned ) : array();
-		$feat   = $logged ? self::featured( $uid ) : array();
+		$feat   = self::featured( $uid );
 		$team   = $logged && class_exists( 'IAMP_Team_Front' ) && IAMP_Team_Front::can_see();
 		$tcid   = $team ? (int) get_option( 'iamp_team_course' ) : 0;
 		$icons  = IAMP_URL . 'assets/app/';
@@ -437,6 +439,17 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 		<p>Kyçu për të hapur bibliotekën me kurset e tua.</p>
 		<a class="btn" href="<?php echo esc_url( $login ); ?>">Hyr</a>
 		<p style="margin:18px 0 0"><a href="<?php echo esc_url( home_url( '/regjistrimi/' ) ); ?>" style="color:#c9a14a;text-decoration:underline">Nuk ke llogari? Regjistrohu falas</a></p>
+		<?php if ( $feat ) : ?>
+			<h2 style="margin-top:30px">✨ Zbulo më shumë</h2>
+			<div class="car" style="text-align:left">
+			<?php foreach ( $feat as $f ) : ?>
+				<div class="it">
+					<a href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener"><img src="<?php echo esc_url( $f['img'] ); ?>" alt="<?php echo esc_attr( $f['title'] ); ?>" loading="lazy"></a>
+					<a class="btn" href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $f['cta'] ); ?></a>
+				</div>
+			<?php endforeach; ?>
+			</div>
+		<?php endif; ?>
 		<?php echo self::whatsapp_card(); // phpcs:ignore ?>
 		<button class="install" id="inst" type="button" style="margin-top:26px">📲 Shkarko aplikacionin</button>
 	</div>
@@ -589,6 +602,37 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 		$atts = shortcode_atts( array( 'tekst' => '📲 Shkarko aplikacionin IAM Power' ), $atts );
 		$url  = add_query_arg( 'instalo', '1', self::app_url() );
 		return '<p style="text-align:center"><a data-iamp-install href="' . esc_url( $url ) . '" style="display:inline-block;padding:14px 26px;border-radius:10px;background:#c9a14a;color:#0b1a33;font-weight:700;text-decoration:none;font-size:16px">' . esc_html( $atts['tekst'] ) . '</a></p>' . self::install_js();
+	}
+
+	/**
+	 * [iam_posteret titulli="Zbulo më shumë"] — rresht me posterat (rrëshqet anash) për çdo faqe.
+	 */
+	public static function posters_shortcode( $atts ) {
+		$atts = shortcode_atts( array( 'titulli' => '' ), $atts );
+		$feat = self::featured( get_current_user_id() );
+		if ( ! $feat ) {
+			return '';
+		}
+		ob_start();
+		?>
+<style>
+.iamp-car{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:6px 4px 14px;-webkit-overflow-scrolling:touch}
+.iamp-car::-webkit-scrollbar{display:none}
+.iamp-car .it{flex:0 0 min(72%,300px);scroll-snap-align:start;border-radius:16px;overflow:hidden;border:1px solid #c9a14a;background:#0b1a33;box-shadow:0 8px 22px rgba(11,26,51,.35)}
+.iamp-car .it img{display:block;width:100%;height:auto}
+.iamp-car .it a.b{display:block;text-align:center;margin:10px;padding:11px 8px;border-radius:10px;background:#c9a14a;color:#0b1a33;font-weight:700;font-size:14px;text-decoration:none}
+</style>
+		<?php if ( $atts['titulli'] ) : ?><h2 style="text-align:center"><?php echo esc_html( $atts['titulli'] ); ?></h2><?php endif; ?>
+<div class="iamp-car">
+		<?php foreach ( $feat as $f ) : ?>
+	<div class="it">
+		<a href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener"><img src="<?php echo esc_url( $f['img'] ); ?>" alt="<?php echo esc_attr( $f['title'] ); ?>" loading="lazy"></a>
+		<a class="b" href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $f['cta'] ); ?></a>
+	</div>
+		<?php endforeach; ?>
+</div>
+		<?php
+		return ob_get_clean();
 	}
 
 	/**
