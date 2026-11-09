@@ -278,6 +278,42 @@ JS;
 		return $out;
 	}
 
+	/**
+	 * VIP = anëtar me pagesë: ka anëtarësi aktive me paketë me çmim > 0, ose aktivizim manual pa paketë.
+	 * Paketat falas (çmim 0) nuk e bëjnë VIP. Filtri 'iamp_app_is_vip' lejon ndryshimin e rregullit.
+	 */
+	private static function is_vip( $uid ) {
+		$vip = false;
+		foreach ( (array) IAMP_DB::get_user_memberships( $uid, 'active' ) as $m ) {
+			if ( empty( $m->package_id ) ) {
+				$vip = true;
+				break;
+			}
+			$pkg = IAMP_DB::get_package( (int) $m->package_id );
+			if ( $pkg && (float) $pkg->price > 0 ) {
+				$vip = true;
+				break;
+			}
+		}
+		return (bool) apply_filters( 'iamp_app_is_vip', $vip, $uid );
+	}
+
+	private static function whatsapp_url() {
+		return 'https://wa.me/38976432315?text=' . rawurlencode( 'Përshëndetje! Kam një pyetje për IAM Power.' );
+	}
+
+	private static function whatsapp_card() {
+		ob_start();
+		?>
+		<div class="wa-card">
+			<b>Na kontaktoni në WhatsApp për përgjigje të menjëhershme</b>
+			<a class="wa-btn" href="<?php echo esc_url( self::whatsapp_url() ); ?>" target="_blank" rel="noopener">Shkruaj në WhatsApp</a>
+			<span>+389 76 432 315</span>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
 	/* ---------------------------------------------------------------
 	 * Faqja
 	 * ------------------------------------------------------------- */
@@ -295,6 +331,9 @@ JS;
 		$tcid   = $team ? (int) get_option( 'iamp_team_course' ) : 0;
 		$icons  = IAMP_URL . 'assets/app/';
 		$first  = $logged ? ( $user->first_name ? $user->first_name : $user->display_name ) : '';
+		$vip    = $logged && self::is_vip( $uid );
+		$avatar = $logged ? get_avatar_url( $uid, array( 'size' => 160 ) ) : '';
+		$wa     = self::whatsapp_url();
 
 		header( 'Content-Type: text/html; charset=utf-8' );
 		?>
@@ -343,6 +382,17 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 .feat .fb{padding:14px;display:flex;gap:10px;align-items:center;justify-content:space-between}
 .feat .fb span{font-size:13px;color:#bfb293}
 .feat .btn{padding:13px 22px;font-size:16px}
+.av{position:relative;flex:0 0 auto;width:56px;height:56px;margin-top:6px}
+.av img{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #c9a14a;display:block}
+.av.vip img{border-color:#f3d27a;box-shadow:0 0 14px rgba(243,210,122,.55)}
+.av svg{position:absolute;left:50%;top:-17px;width:34px;height:26px;transform:translateX(-50%) rotate(-6deg);filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+.vipt{display:inline-block;margin-top:3px;padding:2px 9px;border-radius:99px;background:linear-gradient(90deg,#c9a14a,#f3d27a);color:#0b1a33;font-size:11px;font-weight:800;letter-spacing:.5px}
+.wa-card{margin:22px 0 6px;padding:18px;border-radius:16px;background:#0f2a22;border:1px solid #25d366;text-align:center;color:#e6ffee}
+.wa-card b{display:block;margin-bottom:12px;font-size:15px;line-height:1.4}
+.wa-card span{display:block;margin-top:9px;font-size:13px;color:#9fe3b9}
+.wa-btn{display:inline-block;padding:12px 22px;border-radius:10px;background:#25d366;color:#06301a;font-weight:800;font-size:15px}
+.wa-fab{position:fixed;right:14px;bottom:calc(88px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:6}
+.wa-fab svg{width:30px;height:30px}
 .empty,.hello{background:#13264a;border:1px dashed rgba(201,161,74,.5);border-radius:16px;padding:22px;text-align:center;color:#e6d7b5}
 .hello h2{margin:0 0 8px;color:#c9a14a;font-size:20px}
 .nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#0a162c;border-top:1px solid rgba(201,161,74,.4);padding-bottom:env(safe-area-inset-bottom);z-index:5}
@@ -369,12 +419,16 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 		<h1>IAM Power Academy</h1>
 		<p>Kyçu për të hapur bibliotekën me kurset e tua.</p>
 		<a class="btn" href="<?php echo esc_url( $login ); ?>">Hyr</a>
+		<?php echo self::whatsapp_card(); // phpcs:ignore ?>
 		<button class="install" id="inst" type="button" style="margin-top:26px">📲 Shkarko aplikacionin</button>
 	</div>
 <?php else : ?>
 	<div class="top">
-		<img src="<?php echo esc_url( $icons . 'icon-192.png' ); ?>" alt="">
-		<div><h1>Përshëndetje, <?php echo esc_html( $first ); ?></h1><p>IAM Power Academy</p></div>
+		<div class="av<?php echo $vip ? ' vip' : ''; ?>">
+			<?php if ( $vip ) : ?><svg viewBox="0 0 64 48" aria-label="VIP" role="img"><defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff1b8"/><stop offset="1" stop-color="#c9a14a"/></linearGradient></defs><path d="M6 40 L2 10 L18 24 L32 4 L46 24 L62 10 L58 40 Z" fill="url(#cg)" stroke="#8a6a1f" stroke-width="2" stroke-linejoin="round"/><rect x="6" y="40" width="52" height="6" rx="2" fill="#c9a14a" stroke="#8a6a1f" stroke-width="2"/><circle cx="2" cy="10" r="3.5" fill="#fff1b8" stroke="#8a6a1f"/><circle cx="32" cy="4" r="3.5" fill="#fff1b8" stroke="#8a6a1f"/><circle cx="62" cy="10" r="3.5" fill="#fff1b8" stroke="#8a6a1f"/></svg><?php endif; ?>
+			<img src="<?php echo esc_url( $avatar ); ?>" alt="">
+		</div>
+		<div><h1>Përshëndetje, <?php echo esc_html( $first ); ?></h1><p>IAM Power Academy<?php if ( $vip ) : ?> &nbsp;<span class="vipt">👑 ANËTAR VIP</span><?php endif; ?></p></div>
 	</div>
 	<button class="install" id="inst" type="button">📲 Shkarko aplikacionin</button>
 
@@ -396,6 +450,7 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 			<?php endforeach; ?>
 			</div>
 		<?php endif; ?>
+		<?php echo self::whatsapp_card(); // phpcs:ignore ?>
 	</section>
 
 	<section class="tab" id="t-store">
@@ -423,6 +478,7 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 			<?php endforeach; ?>
 			</div>
 		<?php endif; ?>
+		<?php echo self::whatsapp_card(); // phpcs:ignore ?>
 	</section>
 
 	<?php if ( $team ) : ?>
@@ -433,6 +489,8 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 		</div>
 	</section>
 	<?php endif; ?>
+
+	<a class="wa-fab" href="<?php echo esc_url( $wa ); ?>" target="_blank" rel="noopener" aria-label="WhatsApp"><svg viewBox="0 0 32 32" fill="#fff"><path d="M16 3C9.4 3 4 8.3 4 14.9c0 2.3.7 4.5 1.9 6.3L4 29l7.9-2.1c1.7.9 3.5 1.4 5.4 1.4 6.6 0 12-5.3 12-11.9S22.600 3 16 3zm0 21.700c-1.700 0-3.400-.5-4.800-1.300l-.4-.2-4.600 1.200 1.200-4.500-.3-.5c-1-1.500-1.500-3.200-1.500-5 0-5.200 4.300-9.400 9.400-9.400s9.400 4.200 9.400 9.400-4.200 9.300-9.400 9.300zm5.200-7c-.3-.1-1.700-.8-1.900-.9-.3-.1-.5-.1-.7.100-.2.300-.8.900-.9 1.100-.2.200-.3.200-.6.100-1.700-.8-2.800-1.500-3.900-3.400-.3-.5.300-.5.800-1.500.1-.2 0-.4 0-.5l-.9-2.100c-.2-.5-.5-.4-.7-.4h-.6c-.2 0-.5.100-.8.400-.3.300-1 1-1 2.400s1 2.800 1.200 3c.1.200 2.100 3.200 5.100 4.500 1.900.8 2.600.9 3.600.7.600-.1 1.700-.7 2-1.400.2-.7.200-1.300.2-1.400-.1-.1-.3-.2-.6-.3z"/></svg></a>
 
 	<nav class="nav">
 		<button type="button" data-t="t-lib" class="on"><b>📚</b>Biblioteka</button>
