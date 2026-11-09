@@ -3,7 +3,7 @@
  * Plugin Name:       IAM Power Anëtarësia
  * Plugin URI:        https://iampower.al
  * Description:       Aktivizim i anëtarëve në kurset LearnDash: aktivizim manual dhe në grup, paketa me afat, kode aktivizimi, webhook për Digistore24 / Ko-fi / Systeme.io, skadim automatik, email-e në shqip, regjistër veprimesh dhe mjete sigurie për ndërprerjen e lidhjeve të jashtme (ChatGPT/OpenAI).
- * Version:           1.6.3
+ * Version:           1.7.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            IAM Power Academy
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IAMP_VERSION', '1.6.3' );
+define( 'IAMP_VERSION', '1.7.0' );
 define( 'IAMP_FILE', __FILE__ );
 define( 'IAMP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'IAMP_URL', plugin_dir_url( __FILE__ ) );
@@ -37,6 +37,7 @@ require_once IAMP_DIR . 'includes/class-iamp-sales.php';
 require_once IAMP_DIR . 'includes/class-iamp-team-front.php';
 require_once IAMP_DIR . 'includes/class-iamp-admin-team.php';
 require_once IAMP_DIR . 'includes/class-iamp-app.php';
+require_once IAMP_DIR . 'includes/class-iamp-mesimi.php';
 
 register_activation_hook( __FILE__, 'iamp_activate' );
 register_deactivation_hook( __FILE__, 'iamp_deactivate' );
@@ -75,6 +76,7 @@ add_action( 'plugins_loaded', function () {
 	IAMP_Team_Front::init();
 	IAMP_Sales::init();
 	IAMP_App::init();
+	IAMP_Mesimi::init();
 
 	if ( is_admin() ) {
 		IAMP_Admin::init();

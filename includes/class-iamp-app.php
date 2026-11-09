@@ -411,6 +411,8 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 .car .it .btn{display:block;text-align:center;margin:10px;padding:11px 8px;font-size:14px}
 .empty,.hello{background:#13264a;border:1px dashed rgba(201,161,74,.5);border-radius:16px;padding:22px;text-align:center;color:#e6d7b5}
 .hello h2{margin:0 0 8px;color:#c9a14a;font-size:20px}
+.ms-wrap{}
+<?php echo IAMP_Mesimi::css(); // phpcs:ignore ?>
 .nav{position:fixed;left:50%;transform:translateX(-50%);width:100%;max-width:640px;bottom:0;display:flex;background:#0a162c;border-top:1px solid rgba(201,161,74,.4);padding-bottom:env(safe-area-inset-bottom);z-index:5}
 .nav button{flex:1;background:none;border:0;color:#8f8467;padding:11px 4px 9px;font-size:12px;cursor:pointer}
 .nav button b{display:block;font-size:20px;margin-bottom:2px}
@@ -447,6 +449,8 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 			<?php endforeach; ?>
 			</div>
 		<?php endif; ?>
+		<h2 style="margin-top:30px">📖 Mësimi i Ditës</h2>
+		<?php echo IAMP_Mesimi::render( 3 ); // phpcs:ignore ?>
 		<?php echo self::whatsapp_card(); // phpcs:ignore ?>
 		<button class="install" id="inst" type="button" style="margin-top:26px">📲 Shkarko aplikacionin</button>
 	</div>
@@ -521,6 +525,12 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 		<?php echo self::whatsapp_card(); // phpcs:ignore ?>
 	</section>
 
+	<section class="tab" id="t-ms">
+		<h2>📖 Mësimi i Ditës</h2>
+		<?php echo IAMP_Mesimi::render( 14 ); // phpcs:ignore ?>
+		<?php echo self::whatsapp_card(); // phpcs:ignore ?>
+	</section>
+
 	<?php if ( $team ) : ?>
 	<section class="tab" id="t-team">
 		<h2>Skuadra 2026</h2>
@@ -535,6 +545,7 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 	<nav class="nav">
 		<button type="button" data-t="t-lib" class="on"><b>📚</b>Biblioteka</button>
 		<button type="button" data-t="t-store"><b>🛍️</b>Kurse</button>
+		<button type="button" data-t="t-ms"><b>📖</b>Mësimi</button>
 		<?php if ( $team && $tcid ) : ?><button type="button" data-t="t-team"><b>⭐</b>Skuadra</button><?php endif; ?>
 		<a style="flex:1;text-align:center;color:#8f8467;padding:11px 4px 9px;font-size:12px" href="<?php echo esc_url( home_url( '/' ) ); ?>"><b style="display:block;font-size:20px;margin-bottom:2px">🌐</b>Faqja</a>
 	</nav>
