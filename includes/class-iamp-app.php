@@ -27,6 +27,9 @@ class IAMP_App {
 		add_action( 'wp_footer', array( __CLASS__, 'floating_button' ) );
 		add_action( 'wp_footer', array( __CLASS__, 'slot_filler' ), 20 );
 		add_action( 'wp_head', array( __CLASS__, 'head_links' ), 1 );
+		add_action( 'wp_ajax_nopriv_iamp_track', array( __CLASS__, 'track' ) );
+		add_action( 'wp_ajax_iamp_track', array( __CLASS__, 'track' ) );
+		add_action( 'admin_menu', array( __CLASS__, 'stats_menu' ), 20 );
 	}
 
 	public static function app_url() {
@@ -551,6 +554,7 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 </div></div>
 
 <script>
+<?php echo self::track_core( true ); // phpcs:ignore ?>
 (function () {
   var inst = document.getElementById('inst'), sheet = document.getElementById('sheet'), steps = document.getElementById('steps'), dp = null;
   var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
@@ -564,7 +568,7 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
       : '<li>Hap menynë e shfletuesit (⋮ lart djathtas).</li><li>Zgjidh <b>“Install app”</b> / “Shto në ekranin kryesor”.</li><li>Konfirmo.</li>';
     sheet.className = 'sheet on';
   }
-  if (inst) { inst.addEventListener('click', function () { if (dp) { dp.prompt(); dp.userChoice.then(function () { dp = null; inst.style.display = 'none'; }); } else { help(); } }); }
+  if (inst) { inst.addEventListener('click', function () { iampT('click'); if (dp) { dp.prompt(); dp.userChoice.then(function () { dp = null; inst.style.display = 'none'; }); } else { help(); } }); }
   document.getElementById('sheet-x').addEventListener('click', function () { sheet.className = 'sheet'; });
   if (/[?&]instalo=1/.test(location.search) && !standalone) { help(); }
   var tabs = document.querySelectorAll('.tab'), btns = document.querySelectorAll('.nav button');
@@ -587,15 +591,129 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 	 * Butoni “Shkarko aplikacionin” në faqen e zakonshme
 	 * ------------------------------------------------------------- */
 
+	/* ---------------------------------------------------------------
+	 * Numëruesi i shkarkimeve
+	 * ------------------------------------------------------------- */
+
+	const STATS_OPTION = 'iamp_app_stats';
+
+	/**
+	 * JS që dërgon ngjarjet (click, installed, open) te numëruesi.
+	 */
+	private static function track_core( $count_open ) {
+		$u  = esc_url_raw( admin_url( 'admin-ajax.php' ) );
+		$js = 'if(!window.iampT){window.iampT=function(ev){try{var ua=navigator.userAgent,p=/iphone|ipad|ipod/i.test(ua)?"ios":(/android/i.test(ua)?"android":"other"),'
+			. 'd="action=iamp_track&ev="+ev+"&p="+p,u=' . wp_json_encode( $u ) . ';'
+			. 'if(navigator.sendBeacon){navigator.sendBeacon(u,new Blob([d],{type:"application/x-www-form-urlencoded"}));}'
+			. 'else{fetch(u,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:d,keepalive:true});}}catch(e){}};'
+			. 'window.addEventListener("appinstalled",function(){iampT("installed");});}';
+		if ( $count_open ) {
+			$js .= 'try{if(window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone){var t=new Date().toISOString().slice(0,10);'
+				. 'if(localStorage.getItem("iamp_open")!==t){localStorage.setItem("iamp_open",t);iampT("open");}}}catch(e){}';
+		}
+		return $js;
+	}
+
+	public static function track() {
+		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) $_SERVER['HTTP_USER_AGENT'] : ''; // phpcs:ignore
+		if ( '' === $ua || preg_match( '/bot|crawl|spider|preview|curl|wget/i', $ua ) ) {
+			wp_die( '', '', array( 'response' => 204 ) );
+		}
+		$ev = isset( $_POST['ev'] ) ? sanitize_key( wp_unslash( $_POST['ev'] ) ) : ''; // phpcs:ignore
+		$p  = isset( $_POST['p'] ) ? sanitize_key( wp_unslash( $_POST['p'] ) ) : ''; // phpcs:ignore
+		if ( ! in_array( $ev, array( 'click', 'installed', 'open' ), true ) ) {
+			wp_die( '', '', array( 'response' => 204 ) );
+		}
+		if ( ! in_array( $p, array( 'android', 'ios', 'other' ), true ) ) {
+			$p = 'other';
+		}
+		$day   = gmdate( 'Y-m-d', current_time( 'timestamp' ) ); // phpcs:ignore
+		$stats = get_option( self::STATS_OPTION, array() );
+		if ( ! is_array( $stats ) ) {
+			$stats = array();
+		}
+		$key = $ev . '_' . $p;
+		$stats[ $day ][ $key ] = isset( $stats[ $day ][ $key ] ) ? (int) $stats[ $day ][ $key ] + 1 : 1;
+		if ( count( $stats ) > 120 ) {
+			ksort( $stats );
+			$stats = array_slice( $stats, -120, null, true );
+		}
+		update_option( self::STATS_OPTION, $stats, false );
+		wp_die( '', '', array( 'response' => 204 ) );
+	}
+
+	public static function stats_menu() {
+		add_submenu_page( 'iamp', 'Aplikacioni', 'Aplikacioni (shkarkimet)', 'manage_options', 'iamp-app-stats', array( __CLASS__, 'stats_page' ) );
+	}
+
+	public static function stats_page() {
+		$stats = get_option( self::STATS_OPTION, array() );
+		$stats = is_array( $stats ) ? $stats : array();
+		krsort( $stats );
+		$evs = array(
+			'installed' => 'Instalime',
+			'open'      => 'Hapje nga ikona',
+			'click'     => 'Klikime “Shkarko”',
+		);
+		$plat = array(
+			'android' => 'Android',
+			'ios'     => 'iPhone',
+			'other'   => 'Tjetër',
+		);
+		$tot = array();
+		foreach ( $stats as $row ) {
+			foreach ( $row as $k => $n ) {
+				$tot[ $k ] = ( isset( $tot[ $k ] ) ? $tot[ $k ] : 0 ) + (int) $n;
+			}
+		}
+		$sum = function ( $arr, $ev ) {
+			$t = 0;
+			foreach ( array( 'android', 'ios', 'other' ) as $p ) {
+				$t += isset( $arr[ $ev . '_' . $p ] ) ? (int) $arr[ $ev . '_' . $p ] : 0;
+			}
+			return $t;
+		};
+		echo '<div class="wrap"><h1>Aplikacioni IAM Power — shkarkimet</h1>';
+		echo '<p>Android numëron instalimet e sakta. Në iPhone nuk ka sinjal instalimi, ndaj numërohen klikimet te “Shkarko” dhe hapjet nga ikona.</p>';
+		echo '<table class="widefat striped" style="max-width:720px"><thead><tr><th></th>';
+		foreach ( $plat as $pl ) {
+			echo '<th>' . esc_html( $pl ) . '</th>';
+		}
+		echo '<th>Gjithsej</th></tr></thead><tbody>';
+		foreach ( $evs as $e => $label ) {
+			echo '<tr><td><strong>' . esc_html( $label ) . '</strong></td>';
+			foreach ( $plat as $pk => $pl ) {
+				echo '<td>' . (int) ( isset( $tot[ $e . '_' . $pk ] ) ? $tot[ $e . '_' . $pk ] : 0 ) . '</td>';
+			}
+			echo '<td><strong>' . (int) $sum( $tot, $e ) . '</strong></td></tr>';
+		}
+		echo '</tbody></table><h2>Ditët e fundit</h2><table class="widefat striped" style="max-width:720px"><thead><tr><th>Dita</th>';
+		foreach ( $evs as $label ) {
+			echo '<th>' . esc_html( $label ) . '</th>';
+		}
+		echo '</tr></thead><tbody>';
+		foreach ( array_slice( $stats, 0, 30, true ) as $day => $row ) {
+			echo '<tr><td>' . esc_html( $day ) . '</td>';
+			foreach ( $evs as $e => $label ) {
+				echo '<td>' . (int) $sum( $row, $e ) . '</td>';
+			}
+			echo '</tr>';
+		}
+		if ( ! $stats ) {
+			echo '<tr><td colspan="4">Ende pa të dhëna.</td></tr>';
+		}
+		echo '</tbody></table></div>';
+	}
+
 	private static function install_js() {
 		static $done = false;
 		if ( $done ) {
 			return '';
 		}
 		$done = true;
-		return '<script>(function(){var dp=null;window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();dp=e;});'
+		return '<script>' . self::track_core( false ) . '(function(){var dp=null;window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();dp=e;});'
 			. 'document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-iamp-install]");if(!b){return;}'
-			. 'if(window.matchMedia("(display-mode: standalone)").matches){return;}'
+			. 'if(window.matchMedia("(display-mode: standalone)").matches){return;}iampT("click");'
 			. 'if(dp){ev.preventDefault();dp.prompt();dp.userChoice.then(function(){dp=null;});}});})();</script>';
 	}
 
