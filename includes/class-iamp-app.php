@@ -592,10 +592,10 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 	}
 
 	/**
-	 * Buton lundrues për anëtarët e kyçur, te faqja e zakonshme. Mbyllet dhe nuk shfaqet më.
+	 * Buton lundrues për të gjithë vizitorët në telefon (të kyçur ose jo), te faqja e zakonshme. Mbyllet dhe nuk shfaqet më.
 	 */
 	public static function floating_button() {
-		if ( is_admin() || ! is_user_logged_in() || get_query_var( 'iamp_app' ) ) {
+		if ( is_admin() || get_query_var( 'iamp_app' ) ) {
 			return;
 		}
 		if ( ! apply_filters( 'iamp_app_floating_button', true ) ) {
