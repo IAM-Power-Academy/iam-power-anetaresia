@@ -357,11 +357,12 @@ JS;
 html,body{margin:0;background:#0b1a33;color:#f5efe2;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 body{padding-bottom:calc(76px + env(safe-area-inset-bottom));min-height:100vh}
 a{color:inherit;text-decoration:none}
+.top,.tab,.login{max-width:640px;margin-left:auto;margin-right:auto}
 .top{padding:calc(18px + env(safe-area-inset-top)) 18px 14px;background:linear-gradient(180deg,#13264a,#0b1a33);display:flex;align-items:center;gap:12px}
 .top img{width:44px;height:44px;border-radius:12px;border:1px solid #c9a14a}
 .top h1{margin:0;font-size:19px;line-height:1.2;color:#c9a14a;font-weight:700}
 .top p{margin:2px 0 0;font-size:13px;color:#bfb293}
-.install{margin:0 18px 6px;display:none;width:calc(100% - 36px);padding:13px;border:1px solid #c9a14a;border-radius:12px;background:rgba(201,161,74,.12);color:#c9a14a;font-weight:700;font-size:15px;cursor:pointer}
+.install{margin:0 auto 6px;display:none;width:calc(100% - 36px);max-width:604px;padding:13px;border:1px solid #c9a14a;border-radius:12px;background:rgba(201,161,74,.12);color:#c9a14a;font-weight:700;font-size:15px;cursor:pointer}
 .tab{display:none;padding:8px 18px 18px}.tab.on{display:block}
 h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 .grid{display:grid;gap:14px}
@@ -391,11 +392,11 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 .wa-card b{display:block;margin-bottom:12px;font-size:15px;line-height:1.4}
 .wa-card span{display:block;margin-top:9px;font-size:13px;color:#9fe3b9}
 .wa-btn{display:inline-block;padding:12px 22px;border-radius:10px;background:#25d366;color:#06301a;font-weight:800;font-size:15px}
-.wa-fab{position:fixed;right:14px;bottom:calc(88px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:6}
+.wa-fab{position:fixed;right:max(14px,calc(50% - 306px));bottom:calc(88px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:6}
 .wa-fab svg{width:30px;height:30px}
 .empty,.hello{background:#13264a;border:1px dashed rgba(201,161,74,.5);border-radius:16px;padding:22px;text-align:center;color:#e6d7b5}
 .hello h2{margin:0 0 8px;color:#c9a14a;font-size:20px}
-.nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#0a162c;border-top:1px solid rgba(201,161,74,.4);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+.nav{position:fixed;left:50%;transform:translateX(-50%);width:100%;max-width:640px;bottom:0;display:flex;background:#0a162c;border-top:1px solid rgba(201,161,74,.4);padding-bottom:env(safe-area-inset-bottom);z-index:5}
 .nav button{flex:1;background:none;border:0;color:#8f8467;padding:11px 4px 9px;font-size:12px;cursor:pointer}
 .nav button b{display:block;font-size:20px;margin-bottom:2px}
 .nav button.on{color:#c9a14a}
