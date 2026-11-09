@@ -226,6 +226,7 @@ function konfirmo_(sh, r) {
     email: v[K['Email'] - 1],
     paketa_id: v[K['Paketa ID'] - 1],
     kurset_id: String(v[K['Kurset ID'] - 1]),
+    bonuset: String(v[K['Bonus falas shtesë'] - 1]),
     trajneri: v[K['Trajneri'] - 1]
   });
   if (res.ok) {
