@@ -295,20 +295,13 @@ JS;
 
 	/**
 	 * VIP = anëtar me pagesë: ka anëtarësi aktive me paketë me çmim > 0, ose aktivizim manual pa paketë.
-	 * Paketat falas (çmim 0) nuk e bëjnë VIP. Filtri 'iamp_app_is_vip' lejon ndryshimin e rregullit.
+	 * Çdo anëtar me kurs të aktivizuar është VIP. Filtri 'iamp_app_is_vip' lejon ndryshimin e rregullit.
 	 */
 	private static function is_vip( $uid ) {
-		$vip = user_can( $uid, 'manage_options' ); // administratorët e shohin kurorën gjithmonë
-		foreach ( $vip ? array() : (array) IAMP_DB::get_user_memberships( $uid, 'active' ) as $m ) {
-			if ( empty( $m->package_id ) ) {
-				$vip = true;
-				break;
-			}
-			$pkg = IAMP_DB::get_package( (int) $m->package_id );
-			if ( $pkg && (float) $pkg->price > 0 ) {
-				$vip = true;
-				break;
-			}
+		// VIP = administrator, ose anëtar me të paktën një anëtarësi aktive / kurs të aktivizuar.
+		$vip = user_can( $uid, 'manage_options' );
+		if ( ! $vip ) {
+			$vip = (bool) IAMP_DB::get_user_memberships( $uid, 'active' ) || (bool) self::owned_course_ids( $uid );
 		}
 		return (bool) apply_filters( 'iamp_app_is_vip', $vip, $uid );
 	}
