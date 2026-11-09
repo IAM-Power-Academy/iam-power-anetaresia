@@ -25,6 +25,7 @@ class IAMP_App {
 		add_shortcode( 'iam_shkarko_app', array( __CLASS__, 'install_shortcode' ) );
 		add_shortcode( 'iam_posteret', array( __CLASS__, 'posters_shortcode' ) );
 		add_action( 'wp_footer', array( __CLASS__, 'floating_button' ) );
+		add_action( 'wp_footer', array( __CLASS__, 'slot_filler' ), 20 );
 		add_action( 'wp_head', array( __CLASS__, 'head_links' ), 1 );
 	}
 
@@ -633,6 +634,22 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 </div>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * Faqe të ndërtuara si HTML i vetëm (p.sh. faqja kryesore): nëse ka një element me id="iamp-posters-slot",
+	 * aty vendosen posterat dhe butoni “Shkarko aplikacionin”, pa pasur nevojë për shortcode.
+	 */
+	public static function slot_filler() {
+		if ( is_admin() || get_query_var( 'iamp_app' ) ) {
+			return;
+		}
+		$html = self::posters_shortcode( array() ) . self::install_shortcode( array() );
+		if ( '' === trim( $html ) ) {
+			return;
+		}
+		echo '<template id="iamp-slot-tpl">' . $html . '</template>'; // phpcs:ignore
+		echo '<script>(function(){var s=document.getElementById("iamp-posters-slot"),t=document.getElementById("iamp-slot-tpl");if(s&&t){s.appendChild(t.content.cloneNode(true));}})();</script>';
 	}
 
 	/**
