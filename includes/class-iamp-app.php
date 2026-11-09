@@ -231,6 +231,17 @@ JS;
 					'head'  => '🎁 Libër falas',
 					'sub'   => 'Libri dixhital',
 				),
+				array(
+					'match' => '',
+					'title' => 'Arkitekti i Universit',
+					'img'   => IAMP_URL . 'assets/app/arkitekti-i-universit.jpg',
+					'url'   => 'https://iampower.al/aplikim-arkitekti-i-universit/',
+					'cta'   => 'Apliko tani',
+					'head'  => '✨ Arkitekti i Universit',
+					'sub'   => 'Pranohet vetëm 1 anëtar në një kohë',
+					'url2'  => 'https://iampower.al/arkitekti-i-universit/',
+					'cta2'  => 'Më shumë informacion',
+				),
 			)
 		);
 		$out = array();
@@ -372,10 +383,11 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 	<section class="tab" id="t-store">
 		<?php foreach ( $feat as $f ) : ?>
 			<h2><?php echo esc_html( isset( $f['head'] ) ? $f['head'] : '' ); ?></h2>
-			<a class="feat" href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener">
-				<img src="<?php echo esc_url( $f['img'] ); ?>" alt="<?php echo esc_attr( $f['title'] ); ?>" loading="lazy">
-				<div class="fb"><span><?php echo esc_html( isset( $f['sub'] ) ? $f['sub'] : '' ); ?></span><span class="btn"><?php echo esc_html( $f['cta'] ); ?></span></div>
-			</a>
+			<div class="feat">
+				<a href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener"><img src="<?php echo esc_url( $f['img'] ); ?>" alt="<?php echo esc_attr( $f['title'] ); ?>" loading="lazy"></a>
+				<div class="fb"><span><?php echo esc_html( isset( $f['sub'] ) ? $f['sub'] : '' ); ?></span><a class="btn" href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $f['cta'] ); ?></a></div>
+				<?php if ( ! empty( $f['url2'] ) ) : ?><div class="fb" style="padding-top:0"><a href="<?php echo esc_url( $f['url2'] ); ?>" target="_blank" rel="noopener" style="color:#c9a14a;font-size:14px;text-decoration:underline"><?php echo esc_html( $f['cta2'] ); ?></a></div><?php endif; ?>
+			</div>
 		<?php endforeach; ?>
 		<h2>Kurse të tjera</h2>
 		<?php if ( ! $store ) : ?>
