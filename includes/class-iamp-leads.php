@@ -41,6 +41,7 @@ class IAMP_Leads {
 		add_action( 'template_redirect', array( __CLASS__, 'handle_post' ) );
 		add_action( 'wp_ajax_iamp_lead_wa', array( __CLASS__, 'ajax_wa' ) );
 		add_action( 'plugins_loaded', array( __CLASS__, 'maybe_install' ), 20 );
+		add_action( 'iamp_membership_activated', array( __CLASS__, 'on_activated' ), 20, 2 );
 	}
 
 	/* ---------------- Tabelat ---------------- */
@@ -303,6 +304,41 @@ class IAMP_Leads {
 		$wpdb->update( self::t( 'leads' ), $row, array( 'id' => (int) $lead_id ) );
 		self::add_event( $lead_id, $user_id, 'contact', $status, $text );
 		IAMP_Log::add( 'lead_contact', $user_id, array( 'kontakti' => (int) $lead_id, 'statusi' => $status ) );
+	}
+
+	/**
+	 * Anëtari i ri që aktivizohet (nga Mimoza/Avni, me listë në grup, kod ose webhook)
+	 * hyn vetë te Kontaktet dhe ndahet te trajnerja. Shitjet e trajnereve mbeten te trajnerja që shiti.
+	 */
+	public static function on_activated( $membership_id, $user_id ) {
+		if ( ! IAMP_Settings::get( 'lead_from_activations' ) ) {
+			return;
+		}
+		$m    = IAMP_DB::get_membership( $membership_id );
+		$user = get_userdata( $user_id );
+		if ( ! $m || ! $user ) {
+			return;
+		}
+		$sponsor = '';
+		if ( 'shitje' === $m->source && preg_match( '/Trajneri:\s*(.+)$/u', (string) $m->note, $mm ) ) {
+			$sponsor = trim( $mm[1] );
+		}
+		$name  = trim( $user->first_name . ' ' . $user->last_name );
+		$phone = (string) get_user_meta( $user_id, 'billing_phone', true );
+		$r     = self::create(
+			array(
+				'name'     => $name ? $name : $user->display_name,
+				'email'    => $user->user_email,
+				'phone'    => $phone,
+				'sponsor'  => $sponsor,
+				'category' => 'Anëtar i ri',
+				'source'   => 'Aktivizim (' . $m->source . ')',
+			),
+			'' === $sponsor // Shitjet e trajnereve nuk dërgojnë email për çdo shitje.
+		);
+		if ( ! is_wp_error( $r ) && ! empty( $r['duplicate'] ) ) {
+			self::add_event( $r['id'], 0, 'note', null, 'U aktivizua përsëri në iampower.al (' . $m->source . ')' );
+		}
 	}
 
 	/* ---------------- Njoftimi me email ---------------- */

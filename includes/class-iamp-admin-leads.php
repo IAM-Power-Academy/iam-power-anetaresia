@@ -54,6 +54,7 @@ class IAMP_Admin_Leads {
 		IAMP_Settings::update(
 			array(
 				'lead_weights'      => $weights,
+				'lead_from_activations' => empty( $_POST['from_act'] ) ? 0 : 1,
 				'lead_overdue_days' => max( 1, absint( isset( $_POST['overdue'] ) ? $_POST['overdue'] : 5 ) ), // phpcs:ignore
 				'lead_wa_template'  => sanitize_textarea_field( isset( $_POST['wa'] ) ? wp_unslash( $_POST['wa'] ) : '' ), // phpcs:ignore
 			)
@@ -111,6 +112,7 @@ class IAMP_Admin_Leads {
 			$p = $tot_w > 0 ? round( 100 * $w / $tot_w, 1 ) : 0;
 			echo '<tr><th>' . esc_html( $name ) . '</th><td><input type="number" step="0.5" min="0" name="w[' . esc_attr( $k ) . ']" value="' . esc_attr( $w ) . '" style="width:80px"> <span class="description">≈ ' . esc_html( $p ) . '% e kontakteve të reja</span></td></tr>';
 		}
+		echo '<tr><th>Anëtarët e rinj</th><td><label><input type="checkbox" name="from_act" value="1" ' . checked( (int) IAMP_Settings::get( 'lead_from_activations' ), 1, false ) . '> Çdo anëtar i ri që aktivizohet në iampower.al (nga ti, Avni, kodi ose pagesa automatike) hyn vetë te Kontaktet dhe ndahet te trajnerja.</label></td></tr>';
 		echo '<tr><th>Ditë pa lëvizje para "Vonuar"</th><td><input type="number" min="1" name="overdue" value="' . esc_attr( (int) IAMP_Settings::get( 'lead_overdue_days' ) ) . '" style="width:80px"></td></tr>';
 		echo '<tr><th>Mesazhi i parë në WhatsApp</th><td><textarea name="wa" rows="3" class="large-text">' . esc_textarea( (string) IAMP_Settings::get( 'lead_wa_template' ) ) . '</textarea><p class="description">Përdor <code>{emri}</code> (emri i klientit) dhe <code>{trajnerja}</code>. Trajnerja mund ta ndryshojë para se ta dërgojë.</p></td></tr>';
 		echo '</table>';

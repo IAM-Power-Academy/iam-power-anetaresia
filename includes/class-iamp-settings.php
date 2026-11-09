@@ -36,6 +36,7 @@ class IAMP_Settings {
 			'sheet_url'            => '',
 			'sheet_secret'         => '',
 			'lead_weights'         => array( 'teuta' => 3, 'leonora' => 3, 'zejnepe' => 2, 'alda' => 2, 'anila' => 2 ),
+			'lead_from_activations' => 1,
 			'lead_overdue_days'    => 5,
 			'lead_wa_template'     => 'Përshëndetje {emri}, jam {trajnerja} nga IAM Power Academy.',
 			'sheet_link'           => 'https://docs.google.com/spreadsheets/d/1qDFiflVN1Txufd8EJ_U3gf_EECF6g_hn9wpGGXmD-aI/edit',
