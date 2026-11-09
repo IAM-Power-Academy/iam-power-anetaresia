@@ -1,14 +1,12 @@
 name: Publiko versionin
 
-# Ndërton ZIP-in e plugin-it dhe e bashkëngjit te versioni (Release),
-# sa herë që publikohet një Release i ri në GitHub (p.sh. v1.2.0),
-# ose kur shtyhet një etiketë v*.
+# Sa herë që ndryshon numri i versionit te iam-power-anetaresia.php në main,
+# krijohet vetë etiketa (v1.x.x), ZIP-i dhe versioni (Release).
+# WordPress-i në iampower.al e gjen dhe përditësohet vetë — pa asnjë klikim.
 on:
-  release:
-    types: [published]
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,33 +17,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Kontrollo që versioni përputhet me etiketën
+      - name: Lexo versionin
+        id: v
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
           VER=$(grep -m1 -E '^\s*\*\s*Version:' iam-power-anetaresia.php | sed -E 's/.*Version:\s*//' | tr -d '[:space:]')
-          echo "Etiketa: $TAG  Plugin: $VER"
-          if [ "$TAG" != "$VER" ]; then
-            echo "::error::Versioni në iam-power-anetaresia.php ($VER) nuk përputhet me etiketën ($TAG)"
+          CONST=$(grep -m1 "IAMP_VERSION'" iam-power-anetaresia.php | sed -E "s/.*'IAMP_VERSION',\s*'([^']+)'.*/\1/")
+          echo "Versioni: $VER (IAMP_VERSION: $CONST)"
+          if [ "$VER" != "$CONST" ]; then
+            echo "::error::Version ($VER) dhe IAMP_VERSION ($CONST) nuk përputhen"
             exit 1
+          fi
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VER" >/dev/null 2>&1; then
+            echo "Versioni v$VER është publikuar më parë — s'ka gjë për të bërë."
+            echo "new=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=1" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Kontrollo sintaksën PHP
+        if: steps.v.outputs.new == '1'
         run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
 
       - name: Ndërto ZIP-in
+        if: steps.v.outputs.new == '1'
         run: |
           mkdir -p build/iam-power-anetaresia
           rsync -a --exclude '.git' --exclude '.github' --exclude 'build' --exclude 'README.md' --exclude '.gitignore' --exclude 'google-apps-script' ./ build/iam-power-anetaresia/
           cd build && zip -rq ../iam-power-anetaresia.zip iam-power-anetaresia
 
-      - name: Bashkëngjit ZIP-in te Release
+      - name: Publiko versionin
+        if: steps.v.outputs.new == '1'
         env:
           GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.v.outputs.ver }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" iam-power-anetaresia.zip --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" iam-power-anetaresia.zip \
-              --title "IAM Power Anëtarësia $GITHUB_REF_NAME" \
-              --notes "Version i ri i plugin-it."
-          fi
+          NOTES=$(git log -1 --pretty=%s)
+          gh release create "v$VER" iam-power-anetaresia.zip \
+            --target "$GITHUB_SHA" \
+            --title "IAM Power Anëtarësia v$VER" \
+            --notes "$NOTES" \
+            --latest

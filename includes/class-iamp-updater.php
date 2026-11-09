@@ -6,7 +6,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Përditësim automatik nga GitHub Releases (IAM-Power-Academy/iam-power-anetaresia).
  *
- * - Kontrollon versionin e fundit çdo 6 orë.
+ * - Kontrollon versionin e fundit çdo orë dhe, kur ka version të ri, e instalon vetë
+ *   (pa pritur përditësimet automatike të WordPress-it, që ndodhin vetëm 2 herë në ditë).
  * - Repo private: përdor token-in (vetëm-lexim) nga Cilësimet.
  * - Repo publike: punon pa token.
  */
@@ -22,6 +23,7 @@ class IAMP_Updater {
 		add_filter( 'upgrader_pre_download', array( __CLASS__, 'download' ), 10, 3 );
 		add_filter( 'auto_update_plugin', array( __CLASS__, 'auto_update' ), 10, 2 );
 		add_action( 'upgrader_process_complete', array( __CLASS__, 'flush' ), 10, 0 );
+		add_action( 'iamp_daily_check', array( __CLASS__, 'self_update' ), 20 );
 	}
 
 	public static function basename() {
@@ -84,7 +86,7 @@ class IAMP_Updater {
 			'url'       => isset( $data['html_url'] ) ? (string) $data['html_url'] : '',
 		);
 		delete_option( 'iamp_update_error' );
-		set_site_transient( self::CACHE_KEY, $out, 6 * HOUR_IN_SECONDS );
+		set_site_transient( self::CACHE_KEY, $out, HOUR_IN_SECONDS );
 		update_option( 'iamp_update_checked', time(), false );
 		return $version ? $out : null;
 	}
@@ -198,5 +200,46 @@ class IAMP_Updater {
 		$rel = self::latest( true );
 		wp_update_plugins();
 		return $rel;
+	}
+
+	/**
+	 * Çdo orë: nëse në GitHub ka version më të ri, instalohet vetë, pa asnjë klikim.
+	 * Fiket me "Përditëso vetë" te Cilësimet & Email.
+	 */
+	public static function self_update() {
+		if ( ! IAMP_Settings::get( 'auto_update' ) || get_transient( 'iamp_self_updating' ) ) {
+			return;
+		}
+		$rel = self::latest();
+		if ( ! $rel || ! $rel['package'] || ! version_compare( $rel['version'], IAMP_VERSION, '>' ) ) {
+			return;
+		}
+		set_transient( 'iamp_self_updating', 1, 15 * MINUTE_IN_SECONDS );
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+		$base   = self::basename();
+		$active = is_plugin_active( $base );
+		delete_site_transient( 'update_plugins' );
+		wp_update_plugins(); // Mbush listën e përditësimeve me versionin nga GitHub.
+
+		$upgrader = new Plugin_Upgrader( new Automatic_Upgrader_Skin() );
+		$result   = $upgrader->upgrade( $base );
+
+		if ( $active && ! is_plugin_active( $base ) ) {
+			activate_plugin( $base, '', false, true );
+		}
+		delete_transient( 'iamp_self_updating' );
+
+		if ( true === $result || null === $result ) {
+			IAMP_Log::add( 'update', 0, 'U përditësua vetë nga ' . IAMP_VERSION . ' në ' . $rel['version'] );
+		} else {
+			$msg = is_wp_error( $result ) ? $result->get_error_message() : 'arsye e panjohur';
+			update_option( 'iamp_update_error', 'Përditësimi automatik dështoi: ' . $msg, false );
+			IAMP_Log::add( 'update', 0, 'Përditësimi automatik në ' . $rel['version'] . ' dështoi: ' . $msg );
+		}
 	}
 }

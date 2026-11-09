@@ -8,8 +8,7 @@ Plugin WordPress për aktivizimin e anëtarëve të IAM Power Academy në kurset
 
 1. Ndrysho `Version:` dhe `IAMP_VERSION` te `iam-power-anetaresia.php` (p.sh. `1.2.0`).
 2. Bëj commit te `main`.
-3. Në GitHub: **Releases → Draft a new release** → etiketa `v1.2.0` → **Publish release**.
-4. GitHub Actions ndërton ZIP-in dhe e bashkëngjit te Release-i.
-5. WordPress-i në iampower.al e sheh versionin e ri brenda 6 orëve (ose menjëherë me “Kontrollo tani” te *IAM Anëtarët → Cilësimet & Email*).
+3. GitHub Actions krijon vetë etiketën `v1.2.0`, ZIP-in dhe versionin (Release).
+4. WordPress-i në iampower.al e gjen dhe e instalon vetë brenda 1 ore (ose menjëherë me “Kontrollo tani” te *IAM Anëtarët → Cilësimet & Email*).
 
 Udhëzimi i plotë në shqip: `LEXO-MUA.txt`.
