@@ -181,7 +181,16 @@ class IAMP_Team_Front {
 		}
 		$name = trim( $u->first_name . ' ' . $u->last_name );
 		$name = $name ? $name : $u->display_name;
-		wp_send_json_success( array( 'found' => true, 'valid' => true, 'name' => $name ) );
+		// Telefoni nga llogaria (WooCommerce ose fusha të tjera të zakonshme), nëse ekziston.
+		$phone = '';
+		foreach ( array( 'billing_phone', 'phone', 'telefoni', 'mobile', 'user_phone', 'phone_number' ) as $k ) {
+			$v = trim( (string) get_user_meta( $u->ID, $k, true ) );
+			if ( '' !== $v ) {
+				$phone = $v;
+				break;
+			}
+		}
+		wp_send_json_success( array( 'found' => true, 'valid' => true, 'name' => $name, 'phone' => $phone ) );
 	}
 
 	/* ---------------- Forma ---------------- */
@@ -286,8 +295,8 @@ class IAMP_Team_Front {
 					</select>
 				<?php endif; ?>
 				<div class="iamt-grid">
-					<div><label>Emri dhe mbiemri i klientit *</label><input type="text" name="iamp_client_name" required></div>
-					<div><label>Telefoni</label><input type="text" name="iamp_client_phone" placeholder="+383 ..."></div>
+					<div><label>Emri dhe mbiemri i klientit *</label><input type="text" name="iamp_client_name" id="iamp_client_name" required></div>
+					<div><label>Telefoni</label><input type="text" name="iamp_client_phone" id="iamp_client_phone" placeholder="+383 ..."></div>
 				</div>
 				<label>Email-i i klientit *</label>
 				<input type="email" name="iamp_client_email" id="iamp_client_email" required autocomplete="off">
@@ -339,6 +348,14 @@ class IAMP_Team_Front {
 			var nonce = <?php echo wp_json_encode( wp_create_nonce( 'iamp_check_email' ) ); ?>;
 			function show(cls, html) { box.className = 'iamt-emailcheck ' + cls; box.innerHTML = html; }
 			function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+			// Mbush emrin dhe telefonin nga llogaria. Nuk prek atë që trajneri e ka shkruar vetë.
+			function fill(id, val) {
+				var f = document.getElementById(id);
+				if (!f || !val) { return; }
+				if (f.value.trim() === '' || f.getAttribute('data-auto') === f.value) {
+					f.value = val; f.setAttribute('data-auto', val);
+				}
+			}
 			function lock(on) { btn.disabled = on; btn.style.opacity = on ? '.5' : ''; btn.style.cursor = on ? 'not-allowed' : ''; }
 			function check() {
 				var v = input.value.trim().toLowerCase();
@@ -354,6 +371,8 @@ class IAMP_Team_Front {
 					if (!j || !j.success) { show('bad', '❌ ' + esc((j && j.data && j.data.msg) || 'Kontrolli dështoi. Rifresko faqen.')); return; }
 					if (j.data.found) {
 						ok = true; lock(false);
+						fill('iamp_client_name', j.data.name);
+						fill('iamp_client_phone', j.data.phone);
 						show('good', '✅ Llogaria u gjet: <strong>' + esc(j.data.name || v) + '</strong>. Sigurohu që është klienti yt.');
 					} else if (!j.data.valid) {
 						show('bad', '❌ Email-i nuk është shkruar saktë.');
