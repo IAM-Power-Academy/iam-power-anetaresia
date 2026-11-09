@@ -405,6 +405,11 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 .wa-btn{display:inline-block;padding:12px 22px;border-radius:10px;background:#25d366;color:#06301a;font-weight:800;font-size:15px}
 .wa-fab{position:fixed;right:max(14px,calc(50% - 306px));bottom:calc(88px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:6}
 .wa-fab svg{width:30px;height:30px}
+.car{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -18px;padding:0 18px 8px;-webkit-overflow-scrolling:touch}
+.car::-webkit-scrollbar{display:none}
+.car .it{flex:0 0 72%;max-width:300px;scroll-snap-align:start;border-radius:16px;overflow:hidden;border:1px solid #c9a14a;background:#13264a;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.car .it img{display:block;width:100%;height:auto}
+.car .it .btn{display:block;text-align:center;margin:10px;padding:11px 8px;font-size:14px}
 .empty,.hello{background:#13264a;border:1px dashed rgba(201,161,74,.5);border-radius:16px;padding:22px;text-align:center;color:#e6d7b5}
 .hello h2{margin:0 0 8px;color:#c9a14a;font-size:20px}
 .nav{position:fixed;left:50%;transform:translateX(-50%);width:100%;max-width:640px;bottom:0;display:flex;background:#0a162c;border-top:1px solid rgba(201,161,74,.4);padding-bottom:env(safe-area-inset-bottom);z-index:5}
@@ -461,6 +466,17 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 						<div class="meta"><span><?php echo (int) $c['progress']; ?>% e përfunduar</span><span class="btn"><?php echo $c['progress'] > 0 ? 'Vazhdo' : 'Fillo'; ?></span></div>
 					</div>
 				</a>
+			<?php endforeach; ?>
+			</div>
+		<?php endif; ?>
+		<?php if ( $feat ) : ?>
+			<h2>✨ Zbulo më shumë</h2>
+			<div class="car">
+			<?php foreach ( $feat as $f ) : ?>
+				<div class="it">
+					<a href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener"><img src="<?php echo esc_url( $f['img'] ); ?>" alt="<?php echo esc_attr( $f['title'] ); ?>" loading="lazy"></a>
+					<a class="btn" href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $f['cta'] ); ?></a>
+				</div>
 			<?php endforeach; ?>
 			</div>
 		<?php endif; ?>
