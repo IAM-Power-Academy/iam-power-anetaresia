@@ -41,6 +41,7 @@ class IAMP_Leads {
 		add_action( 'template_redirect', array( __CLASS__, 'handle_post' ) );
 		add_action( 'wp_ajax_iamp_lead_wa', array( __CLASS__, 'ajax_wa' ) );
 		add_action( 'plugins_loaded', array( __CLASS__, 'maybe_install' ), 20 );
+		add_action( 'iamp_daily_check', array( __CLASS__, 'daily_digest' ), 30 );
 		add_action( 'iamp_membership_activated', array( __CLASS__, 'on_activated' ), 20, 2 );
 	}
 
@@ -341,6 +342,114 @@ class IAMP_Leads {
 		}
 	}
 
+
+	/**
+	 * Nxjerr kontaktet nga teksti i ngjitur nga grupi në WhatsApp.
+	 * Një kontakt për rresht (emër + numër), ose një bllok me rreshta të ndarë me rresht bosh.
+	 *
+	 * @return array[] Lista me name, phone, email.
+	 */
+	public static function parse_text( $text ) {
+		$text = preg_replace( '/\[\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4},?\s*\d{1,2}:\d{2}(:\d{2})?\]\s*[^:]{1,60}:\s*/u', '', (string) $text ); // "[12/11/26, 10:15] Mimoza:"
+		$text = preg_replace( '/^\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4},?\s*\d{1,2}:\d{2}\s*-\s*[^:]{1,60}:\s*/mu', '', $text ); // "12/11/26, 10:15 - Mimoza:"
+		$blocks = preg_split( '/\R\s*\R/u', trim( $text ) );
+		$out    = array();
+		$phone_re = '/(\+?\d[\d\s().\-]{6,}\d)/u';
+		foreach ( $blocks as $block ) {
+			$lines = array_values( array_filter( array_map( 'trim', preg_split( '/\R/u', $block ) ), 'strlen' ) );
+			if ( ! $lines ) {
+				continue;
+			}
+			$per_line = count( $lines ) > 1;
+			foreach ( $lines as $ln ) {
+				if ( ! preg_match( $phone_re, $ln ) && ! self::norm_email( $ln ) ) {
+					$per_line = false;
+				}
+			}
+			$groups = $per_line ? array_map( function ( $l ) {
+				return array( $l );
+			}, $lines ) : array( $lines );
+			foreach ( $groups as $g ) {
+				$joined = implode( ' ', $g );
+				$phone  = '';
+				if ( preg_match( $phone_re, $joined, $m ) ) {
+					$phone = self::norm_phone( $m[1] );
+				}
+				$email = self::norm_email( $joined );
+				if ( ! $phone && ! $email ) {
+					continue;
+				}
+				$name = preg_replace( $phone_re, ' ', $joined );
+				$name = preg_replace( '/\S+@\S+/u', ' ', $name );
+				$name = preg_replace( '/\b(emri|mbiemri|tel(efoni)?|nr|numri|email|e-mail|whatsapp|viber|instagram|facebook|nga|klient\w*|kontakt\w*|i ri|e re|të rinj)\b\s*[:\-]?/iu', ' ', $name );
+				$name = trim( preg_replace( '/[\s,;:|\-–—]+/u', ' ', $name ) );
+				$out[] = array( 'name' => mb_substr( $name, 0, 120 ), 'phone' => $phone, 'email' => $email );
+			}
+		}
+		return $out;
+	}
+
+	/** Ngjit mesazhin nga grupi → krijon kontaktet dhe i ndan. */
+	public static function paste_import( $text, $sponsor_name = '' ) {
+		$items = self::parse_text( $text );
+		$by    = array();
+		$lines = array();
+		$new   = 0;
+		foreach ( $items as $it ) {
+			$r = self::create(
+				array(
+					'name'     => $it['name'],
+					'phone'    => $it['phone'],
+					'email'    => $it['email'],
+					'sponsor'  => $sponsor_name,
+					'category' => 'Klient i ri',
+					'source'   => 'Grupi WhatsApp',
+				),
+				false
+			);
+			$label = ( $it['name'] ? $it['name'] : ( $it['phone'] ? '+' . $it['phone'] : $it['email'] ) );
+			if ( is_wp_error( $r ) ) {
+				continue;
+			}
+			if ( $r['duplicate'] ) {
+				$lines[] = $label . ' → ekziston, është te ' . IAMP_Sales::trainer_name( $r['owner'] );
+			} else {
+				$new++;
+				$by[ $r['owner'] ][] = $r['id'];
+				$lines[] = $label . ' → ' . IAMP_Sales::trainer_name( $r['owner'] );
+			}
+		}
+		foreach ( $by as $uid => $ids ) {
+			self::notify_owner( $uid, $ids );
+		}
+		return array( 'new' => $new, 'found' => count( $items ), 'lines' => $lines );
+	}
+
+	/** Një email në ditë për trajnere: kontaktet e vonuara dhe rikontaktet e sotme. */
+	public static function daily_digest() {
+		if ( get_option( 'iamp_leads_digest_day' ) === current_time( 'Y-m-d' ) || (int) current_time( 'G' ) < 8 ) {
+			return;
+		}
+		update_option( 'iamp_leads_digest_day', current_time( 'Y-m-d' ), false );
+		global $wpdb;
+		$t    = self::t( 'leads' );
+		$page = (string) get_option( 'iamp_leads_page_url', '' );
+		foreach ( self::stats() as $uid => $s ) {
+			$today = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $t WHERE owner_id = %d AND next_followup = %s AND status NOT IN ('bleu','nuk_interesohet')", $uid, current_time( 'Y-m-d' ) ) ); // phpcs:ignore
+			if ( ! $s['overdue'] && ! $today && ! $s['new'] ) {
+				continue;
+			}
+			$user = get_userdata( $uid );
+			if ( ! $user ) {
+				continue;
+			}
+			$msg = 'Përshëndetje ' . $s['name'] . ",\n\nKujtesë për sot:\n";
+			$msg .= '• Pa kontaktuar ende: ' . (int) $s['new'] . "\n• Të vonuara: " . (int) $s['overdue'] . "\n• Për t'u rikontaktuar sot: " . $today . "\n";
+			$msg .= $page ? "\nHap listën: " . $page : '';
+			wp_mail( $user->user_email, 'IAM Power: kontaktet për sot', $msg . "\n\nEkipi IAM Power" );
+		}
+	}
+
 	/* ---------------- Njoftimi me email ---------------- */
 
 	public static function notify_owner( $owner_id, $lead_ids ) {
@@ -524,6 +633,14 @@ class IAMP_Leads {
 				set_transient( 'iamp_lead_msg_' . $uid, array( 'err', 'Ky kontakt ekziston tashmë dhe është te ' . IAMP_Sales::trainer_name( $r['owner'] ) . '.' ), 120 );
 			} else {
 				set_transient( 'iamp_lead_msg_' . $uid, array( 'ok', 'Kontakti u shtua dhe u ndanë te ' . IAMP_Sales::trainer_name( $r['owner'] ) . '.' ), 120 );
+			}
+		} elseif ( 'paste' === $act ) {
+			$text = isset( $_POST['paste'] ) ? sanitize_textarea_field( wp_unslash( $_POST['paste'] ) ) : ''; // phpcs:ignore
+			$res  = self::paste_import( $text, IAMP_Sales::is_team() && 'me' === $p( 'mine' ) ? IAMP_Sales::trainer_name( $uid ) : '' );
+			if ( ! $res['found'] ) {
+				set_transient( 'iamp_lead_msg_' . $uid, array( 'err', 'Nuk gjeta asnjë numër telefoni ose email në tekst.' ), 120 );
+			} else {
+				set_transient( 'iamp_lead_msg_' . $uid, array( 'ok', 'U shtuan ' . $res['new'] . ' nga ' . $res['found'] . ' kontakte: ' . implode( ' · ', $res['lines'] ) ), 120 );
 			}
 		} elseif ( 'reassign' === $act && current_user_can( 'manage_options' ) ) {
 			$new = absint( $p( 'owner' ) );
@@ -765,6 +882,20 @@ class IAMP_Leads {
 			<div class="iamt-head"><h2>Kontakt i ri</h2><p>Shto emrin dhe numrin. Sistemi e cakton vetë te trajnerja përkatëse dhe i dërgon njoftim.</p></div>
 			<?php echo self::msg(); // phpcs:ignore ?>
 			<div class="iamt-card">
+				<h3 style="margin-top:0">Ngjit nga grupi në WhatsApp</h3>
+				<p class="iamt-hint">Kopjo mesazhin ose mesazhet me klientët e rinj (emri dhe numri, një për rresht) dhe ngjiti këtu. Sistemi i gjen vetë dhe i ndan.</p>
+				<form method="post">
+					<input type="hidden" name="iamp_lead_action" value="paste">
+					<input type="hidden" name="iamp_lead_nonce" value="<?php echo esc_attr( $nonce ); ?>">
+					<textarea name="paste" rows="6" placeholder="Arta Berisha +355 69 123 4567&#10;Drita Hoxha +383 44 555 666" style="min-height:120px"></textarea>
+					<?php if ( IAMP_Sales::is_team() ) : ?>
+					<label class="iamt-check"><input type="checkbox" name="mine" value="me" style="width:auto"> Janë klientët e mi (mbeten te unë)</label>
+					<?php endif; ?>
+					<p><button type="submit" class="iamt-btn">Shto nga teksti</button></p>
+				</form>
+			</div>
+			<div class="iamt-card">
+				<h3 style="margin-top:0">Ose shto një kontakt</h3>
 				<form method="post">
 					<input type="hidden" name="iamp_lead_action" value="new">
 					<input type="hidden" name="iamp_lead_nonce" value="<?php echo esc_attr( $nonce ); ?>">

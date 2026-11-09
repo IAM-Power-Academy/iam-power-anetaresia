@@ -43,6 +43,8 @@ IAM POWER ANËTARËSIA — UDHËZIM I SHKURTËR
      Trajnerja merr email; te “Kontaktet e mia” klikon WhatsApp, zgjedh statusin dhe shkruan çfarë ka ndodhur.
    • Anëtari i ri që aktivizohet (nga Mimoza/Avni, me listë në grup, kod ose pagesë automatike) hyn vetë
      te Kontaktet dhe ndahet te trajnerja. Shitjet e trajnereve mbeten te trajnerja që shiti. Çaktivizohet te Kontaktet → Cilësimet.
+   • Klientët e rinj nga grupi në WhatsApp: te “Kontakt i ri” kopjo mesazhin, ngjite dhe shtyp “Shto nga teksti”.
+     Sistemi gjen emrat dhe numrat vetë (edhe disa njëherësh) dhe i ndan. Çdo mëngjes trajnerja merr një email kujtese.
    • Historiku i çdo kontakti ruhet me datë; kontaktet pa lëvizje për 5 ditë dalin “Vonuar”.
 
 KUJDES PËR EMAIL-ET
