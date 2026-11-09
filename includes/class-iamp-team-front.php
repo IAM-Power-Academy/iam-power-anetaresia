@@ -20,6 +20,7 @@ class IAMP_Team_Front {
 		add_action( 'wp_ajax_iamp_check_email', array( __CLASS__, 'ajax_check_email' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'protect' ), 1 );
 		add_action( 'pre_get_posts', array( __CLASS__, 'hide_from_queries' ) );
+		add_action( 'wp_head', array( __CLASS__, 'hide_admin_lesson_css' ), 99 );
 		foreach ( array( 'sfwd-courses', 'sfwd-lessons', 'sfwd-topic' ) as $pt ) {
 			add_filter( 'rest_prepare_' . $pt, array( __CLASS__, 'hide_from_rest' ), 10, 2 );
 		}
@@ -72,6 +73,22 @@ class IAMP_Team_Front {
 			status_header( 404 );
 			nocache_headers();
 		}
+	}
+
+	/**
+	 * Mësimi "Kërkesa për aktivizim" është vetëm për administratorin:
+	 * i fsheh lidhjen te menyja anësore dhe te lista e kursit për të gjithë të tjerët.
+	 */
+	public static function hide_admin_lesson_css() {
+		if ( current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		echo '<style id="iamp-hide-admin-lesson">'
+			. '.ld-lesson-item:has(a[href*="kerkesa-per-aktivizim"]),'
+			. '.ld-table-list-item:has(a[href*="kerkesa-per-aktivizim"]),'
+			. '.ld-item-list-item:has(a[href*="kerkesa-per-aktivizim"]),'
+			. '.learndash-wrapper li:has(> a[href*="kerkesa-per-aktivizim"]){display:none!important}'
+			. '</style>';
 	}
 
 	public static function hide_from_queries( $q ) {
