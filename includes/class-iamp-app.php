@@ -205,6 +205,39 @@ JS;
 		return apply_filters( 'iamp_app_store_items', $items, $owned );
 	}
 
+	/**
+	 * Kursi “Më i shituri” (shitet në Ko-fi). Filtri 'iamp_app_featured' lejon ndryshimin ose shtimin.
+	 * Fshihet vetëm nëse anëtari ka tashmë një kurs me titull që përmban 'Zemra e Martes'.
+	 */
+	private static function featured( $uid ) {
+		$items = apply_filters(
+			'iamp_app_featured',
+			array(
+				array(
+					'match' => 'Zemra e Martes',
+					'title' => 'Zemra e Martesës',
+					'img'   => IAMP_URL . 'assets/app/zemra-e-martes.jpg',
+					'url'   => 'https://ko-fi.com/s/fad5cab7c2',
+					'cta'   => 'Blej tani',
+				),
+			)
+		);
+		$out = array();
+		foreach ( (array) $items as $it ) {
+			$has = false;
+			foreach ( self::owned_course_ids( $uid ) as $cid ) {
+				if ( ! empty( $it['match'] ) && false !== stripos( remove_accents( get_the_title( $cid ) ), remove_accents( $it['match'] ) ) ) {
+					$has = true;
+					break;
+				}
+			}
+			if ( ! $has ) {
+				$out[] = $it;
+			}
+		}
+		return $out;
+	}
+
 	/* ---------------------------------------------------------------
 	 * Faqja
 	 * ------------------------------------------------------------- */
@@ -217,6 +250,7 @@ JS;
 		$lib    = $logged ? self::library( $uid ) : array();
 		$owned  = wp_list_pluck( $lib, 'id' );
 		$store  = $logged ? self::store( $owned ) : array();
+		$feat   = $logged ? self::featured( $uid ) : array();
 		$team   = $logged && class_exists( 'IAMP_Team_Front' ) && IAMP_Team_Front::can_see();
 		$tcid   = $team ? (int) get_option( 'iamp_team_course' ) : 0;
 		$icons  = IAMP_URL . 'assets/app/';
@@ -264,6 +298,11 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 .price{font-size:18px;font-weight:800;color:#c9a14a}
 .price.free{color:#7be0a0}
 .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.feat{display:block;border-radius:18px;overflow:hidden;border:1px solid #c9a14a;box-shadow:0 10px 30px rgba(0,0,0,.45);margin-bottom:16px;background:#13264a}
+.feat img{display:block;width:100%;height:auto}
+.feat .fb{padding:14px;display:flex;gap:10px;align-items:center;justify-content:space-between}
+.feat .fb span{font-size:13px;color:#bfb293}
+.feat .btn{padding:13px 22px;font-size:16px}
 .empty,.hello{background:#13264a;border:1px dashed rgba(201,161,74,.5);border-radius:16px;padding:22px;text-align:center;color:#e6d7b5}
 .hello h2{margin:0 0 8px;color:#c9a14a;font-size:20px}
 .nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#0a162c;border-top:1px solid rgba(201,161,74,.4);padding-bottom:env(safe-area-inset-bottom);z-index:5}
@@ -320,9 +359,16 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 	</section>
 
 	<section class="tab" id="t-store">
+		<?php foreach ( $feat as $f ) : ?>
+			<h2>🔥 Më i shituri</h2>
+			<a class="feat" href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener">
+				<img src="<?php echo esc_url( $f['img'] ); ?>" alt="<?php echo esc_attr( $f['title'] ); ?>" loading="lazy">
+				<div class="fb"><span>Kurs 12-mujor</span><span class="btn"><?php echo esc_html( $f['cta'] ); ?></span></div>
+			</a>
+		<?php endforeach; ?>
 		<h2>Kurse të tjera</h2>
 		<?php if ( ! $store ) : ?>
-			<div class="empty">Ke tashmë të gjitha kurset e disponueshme. 🌟</div>
+			<div class="empty"><?php echo $feat ? 'Nuk ka kurse të tjera për momentin.' : 'Ke tashmë të gjitha kurset e disponueshme. 🌟'; ?></div>
 		<?php else : ?>
 			<div class="grid">
 			<?php foreach ( $store as $s ) : ?>
