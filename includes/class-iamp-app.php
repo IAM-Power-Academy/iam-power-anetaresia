@@ -366,6 +366,8 @@ JS;
 html,body{margin:0;background:#0b1a33;color:#f5efe2;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 body{padding-bottom:calc(76px + env(safe-area-inset-bottom));min-height:100vh}
 a{color:inherit;text-decoration:none}
+.top .lg{margin-left:auto;width:auto;height:50px;border:0;border-radius:0}
+.login img.lg{width:150px;height:auto;border:0;border-radius:0}
 .top,.tab,.login{max-width:640px;margin-left:auto;margin-right:auto}
 .top{padding:calc(18px + env(safe-area-inset-top)) 18px 14px;background:linear-gradient(180deg,#13264a,#0b1a33);display:flex;align-items:center;gap:12px}
 .top img{width:44px;height:44px;border-radius:12px;border:1px solid #c9a14a}
@@ -425,7 +427,7 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 <body>
 <?php if ( ! $logged ) : ?>
 	<div class="login">
-		<img src="<?php echo esc_url( $icons . 'icon-192.png' ); ?>" alt="IAM Power">
+		<img class="lg" src="<?php echo esc_url( $icons . 'logo.png' ); ?>" alt="IAM Power">
 		<h1>IAM Power Academy</h1>
 		<p>Kyçu për të hapur bibliotekën me kurset e tua.</p>
 		<a class="btn" href="<?php echo esc_url( $login ); ?>">Hyr</a>
@@ -440,6 +442,7 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 			<img src="<?php echo esc_url( $avatar ); ?>" alt="">
 		</div>
 		<div><h1>Përshëndetje, <?php echo esc_html( $first ); ?></h1><p>IAM Power Academy<?php if ( $vip ) : ?> &nbsp;<span class="vipt">👑 ANËTAR VIP</span><?php endif; ?></p></div>
+		<img class="lg" src="<?php echo esc_url( $icons . 'logo.png' ); ?>" alt="IAM Power">
 	</div>
 	<button class="install" id="inst" type="button">📲 Shkarko aplikacionin</button>
 
