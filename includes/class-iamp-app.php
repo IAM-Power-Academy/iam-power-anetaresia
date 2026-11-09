@@ -219,6 +219,17 @@ JS;
 					'img'   => IAMP_URL . 'assets/app/zemra-e-martes.jpg',
 					'url'   => 'https://ko-fi.com/s/fad5cab7c2',
 					'cta'   => 'Blej tani',
+					'head'  => '🔥 Më i shituri',
+					'sub'   => 'Kurs 12-mujor',
+				),
+				array(
+					'match' => '',
+					'title' => 'Kodet Sekrete të Pasurimit',
+					'img'   => IAMP_URL . 'assets/app/kodet-sekrete.jpg',
+					'url'   => 'https://iampower.systeme.io/librikodet',
+					'cta'   => 'Shkarko falas',
+					'head'  => '🎁 Libër falas',
+					'sub'   => 'Libri dixhital',
 				),
 			)
 		);
@@ -360,10 +371,10 @@ h2{font-size:17px;margin:20px 0 12px;color:#e6d7b5}
 
 	<section class="tab" id="t-store">
 		<?php foreach ( $feat as $f ) : ?>
-			<h2>🔥 Më i shituri</h2>
+			<h2><?php echo esc_html( isset( $f['head'] ) ? $f['head'] : '' ); ?></h2>
 			<a class="feat" href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener">
 				<img src="<?php echo esc_url( $f['img'] ); ?>" alt="<?php echo esc_attr( $f['title'] ); ?>" loading="lazy">
-				<div class="fb"><span>Kurs 12-mujor</span><span class="btn"><?php echo esc_html( $f['cta'] ); ?></span></div>
+				<div class="fb"><span><?php echo esc_html( isset( $f['sub'] ) ? $f['sub'] : '' ); ?></span><span class="btn"><?php echo esc_html( $f['cta'] ); ?></span></div>
 			</a>
 		<?php endforeach; ?>
 		<h2>Kurse të tjera</h2>
