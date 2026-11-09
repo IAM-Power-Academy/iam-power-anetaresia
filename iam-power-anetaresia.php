@@ -3,7 +3,7 @@
  * Plugin Name:       IAM Power Anëtarësia
  * Plugin URI:        https://iampower.al
  * Description:       Aktivizim i anëtarëve në kurset LearnDash: aktivizim manual dhe në grup, paketa me afat, kode aktivizimi, webhook për Digistore24 / Ko-fi / Systeme.io, skadim automatik, email-e në shqip, regjistër veprimesh dhe mjete sigurie për ndërprerjen e lidhjeve të jashtme (ChatGPT/OpenAI).
- * Version:           1.6.1
+ * Version:           1.6.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            IAM Power Academy
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IAMP_VERSION', '1.6.1' );
+define( 'IAMP_VERSION', '1.6.2' );
 define( 'IAMP_FILE', __FILE__ );
 define( 'IAMP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'IAMP_URL', plugin_dir_url( __FILE__ ) );

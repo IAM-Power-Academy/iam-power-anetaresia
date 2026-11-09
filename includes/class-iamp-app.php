@@ -298,8 +298,8 @@ JS;
 	 * Paketat falas (çmim 0) nuk e bëjnë VIP. Filtri 'iamp_app_is_vip' lejon ndryshimin e rregullit.
 	 */
 	private static function is_vip( $uid ) {
-		$vip = false;
-		foreach ( (array) IAMP_DB::get_user_memberships( $uid, 'active' ) as $m ) {
+		$vip = user_can( $uid, 'manage_options' ); // administratorët e shohin kurorën gjithmonë
+		foreach ( $vip ? array() : (array) IAMP_DB::get_user_memberships( $uid, 'active' ) as $m ) {
 			if ( empty( $m->package_id ) ) {
 				$vip = true;
 				break;
