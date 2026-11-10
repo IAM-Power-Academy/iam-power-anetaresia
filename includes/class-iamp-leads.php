@@ -649,8 +649,18 @@ class IAMP_Leads {
 				set_transient( 'iamp_lead_msg_' . $uid, array( 'ok', 'Kontakti u kalua.' ), 120 );
 			}
 		}
-		wp_safe_redirect( remove_query_arg( 'x', wp_get_referer() ? wp_get_referer() : home_url() ) );
+		$back = isset( $_POST['iamp_back'] ) ? esc_url_raw( wp_unslash( $_POST['iamp_back'] ) ) : ''; // phpcs:ignore
+		if ( ! $back ) {
+			$back = wp_get_referer() ? wp_get_referer() : (string) get_option( 'iamp_leads_page_url', '' );
+		}
+		wp_safe_redirect( remove_query_arg( 'x', wp_validate_redirect( $back, home_url() ) ) );
 		exit;
+	}
+
+	/** Fusha e fshehur me adresën e faqes aktuale, që pas ruajtjes të kthehesh aty (pa u varur nga referrer-i i shfletuesit). */
+	private static function back_field() {
+		$url = ( is_ssl() ? 'https://' : 'http://' ) . ( isset( $_SERVER['HTTP_HOST'] ) ? wp_unslash( $_SERVER['HTTP_HOST'] ) : '' ) . ( isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '' ); // phpcs:ignore
+		return '<input type="hidden" name="iamp_back" value="' . esc_attr( esc_url_raw( $url ) ) . '">';
 	}
 
 	/** Regjistron hapjen e WhatsApp-it (nuk ndryshon statusin). */
@@ -827,6 +837,7 @@ class IAMP_Leads {
 					<form method="post">
 						<input type="hidden" name="iamp_lead_action" value="contact">
 						<input type="hidden" name="iamp_lead_nonce" value="<?php echo esc_attr( $nonce ); ?>">
+						<?php echo self::back_field(); // phpcs:ignore ?>
 						<input type="hidden" name="lead_id" value="<?php echo (int) $lead->id; ?>">
 						<select name="status">
 							<?php foreach ( self::statuses() as $k => $label ) : ?>
@@ -841,6 +852,7 @@ class IAMP_Leads {
 					<form method="post" style="grid-template-columns:auto auto">
 						<input type="hidden" name="iamp_lead_action" value="reassign">
 						<input type="hidden" name="iamp_lead_nonce" value="<?php echo esc_attr( $nonce ); ?>">
+						<?php echo self::back_field(); // phpcs:ignore ?>
 						<input type="hidden" name="lead_id" value="<?php echo (int) $lead->id; ?>">
 						<select name="owner"><?php foreach ( self::trainers() as $tid => $tn ) : ?><option value="<?php echo (int) $tid; ?>" <?php selected( (int) $lead->owner_id, (int) $tid ); ?>><?php echo esc_html( $tn ); ?></option><?php endforeach; ?></select>
 						<button type="submit" class="iamt-btn">Kalo te…</button>
@@ -887,6 +899,7 @@ class IAMP_Leads {
 				<form method="post">
 					<input type="hidden" name="iamp_lead_action" value="paste">
 					<input type="hidden" name="iamp_lead_nonce" value="<?php echo esc_attr( $nonce ); ?>">
+						<?php echo self::back_field(); // phpcs:ignore ?>
 					<textarea name="paste" rows="6" placeholder="Arta Berisha +355 69 123 4567&#10;Drita Hoxha +383 44 555 666" style="min-height:120px"></textarea>
 					<?php if ( IAMP_Sales::is_team() ) : ?>
 					<label class="iamt-check"><input type="checkbox" name="mine" value="me" style="width:auto"> Janë klientët e mi (mbeten te unë)</label>
@@ -899,6 +912,7 @@ class IAMP_Leads {
 				<form method="post">
 					<input type="hidden" name="iamp_lead_action" value="new">
 					<input type="hidden" name="iamp_lead_nonce" value="<?php echo esc_attr( $nonce ); ?>">
+						<?php echo self::back_field(); // phpcs:ignore ?>
 					<div class="iamt-grid">
 						<div><label>Emri dhe mbiemri</label><input type="text" name="name"></div>
 						<div><label>Telefoni (me kodin e shtetit)</label><input type="text" name="phone" placeholder="+355..."></div>
