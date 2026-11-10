@@ -124,6 +124,10 @@ class IAMP_Team_Front {
 		return $args;
 	}
 
+	public static function css_public() {
+		return self::css();
+	}
+
 	private static function css() {
 		static $done = false;
 		if ( $done ) {

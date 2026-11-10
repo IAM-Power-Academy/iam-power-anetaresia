@@ -35,6 +35,18 @@ IAM POWER ANËTARËSIA — UDHËZIM I SHKURTËR
    Cilësimet & Email → “Ekipi” → zgjidh rolin (p.sh. Editor ose Shop manager).
    Ata mund të aktivizojnë anëtarë, por nuk shohin cilësimet dhe sigurinë.
 
+8) KONTAKTET E SKUADRËS  (versioni 1.8.0)
+   • Skuadra & Bonuset → “Rikontrollo kursin” shton dy mësime të reja: “Kontaktet e mia” dhe “Kontakt i ri”.
+   • IAM Anëtarët → Kontaktet: pasqyra sipas trajnereve, importi nga CSV dhe peshat e ndarjes
+     (Teuta 3, Leonora 3, Zejnepe 2, Alda 2, Anila 2 — ndryshohen aty).
+   • Kontakti i ri ndahet vetë: te sponsori nëse është trajnere aktive, ndryshe sipas peshave.
+     Trajnerja merr email; te “Kontaktet e mia” klikon WhatsApp, zgjedh statusin dhe shkruan çfarë ka ndodhur.
+   • Anëtari i ri që aktivizohet (nga Mimoza/Avni, me listë në grup, kod ose pagesë automatike) hyn vetë
+     te Kontaktet dhe ndahet te trajnerja. Shitjet e trajnereve mbeten te trajnerja që shiti. Çaktivizohet te Kontaktet → Cilësimet.
+   • Klientët e rinj nga grupi në WhatsApp: te “Kontakt i ri” kopjo mesazhin, ngjite dhe shtyp “Shto nga teksti”.
+     Sistemi gjen emrat dhe numrat vetë (edhe disa njëherësh) dhe i ndan. Çdo mëngjes trajnerja merr një email kujtese.
+   • Historiku i çdo kontakti ruhet me datë; kontaktet pa lëvizje për 5 ditë dalin “Vonuar”.
+
 KUJDES PËR EMAIL-ET
    Instalo “WP Mail SMTP” dhe lidhe me info@iampower.al, përndryshe email-et mund të bien në spam.
    Testo te: Cilësimet & Email → “Dërgo email test”.

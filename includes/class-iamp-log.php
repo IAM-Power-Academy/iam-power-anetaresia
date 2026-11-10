@@ -69,6 +69,8 @@ class IAMP_Log {
 			'sale_no'         => 'Shitje e refuzuar',
 			'payout'          => 'Pagesë bonusi',
 			'team'            => 'Skuadra',
+			'lead_contact'    => 'Kontakt i regjistruar',
+			'lead_import'     => 'Import kontaktesh',
 		);
 		return isset( $labels[ $action ] ) ? $labels[ $action ] : $action;
 	}

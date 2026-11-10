@@ -131,6 +131,8 @@ class IAMP_Admin_Team {
 			array( 'Paneli im', '[iam_paneli_im]', 2 ),
 			array( 'Linqet e punës', $links, 3 ),
 			array( 'Kërkesa për aktivizim', '[iam_kerkesat_aktivizim]', 4 ),
+			array( 'Kontaktet e mia', '[iam_kontaktet_e_mia]', 5 ),
+			array( 'Kontakt i ri', '[iam_kontakt_i_ri]', 6 ),
 		);
 		$ids = (array) get_option( 'iamp_team_lessons', array() );
 		foreach ( $lessons as $i => $l ) {
@@ -153,6 +155,9 @@ class IAMP_Admin_Team {
 			update_post_meta( $lid, 'course_id', $course );
 		}
 		update_option( 'iamp_team_lessons', $ids, false );
+		if ( ! empty( $ids[4] ) ) {
+			update_option( 'iamp_leads_page_url', get_permalink( (int) $ids[4] ), false );
+		}
 		if ( function_exists( 'learndash_course_add_child_to_parent' ) ) {
 			foreach ( $ids as $lid ) {
 				learndash_course_add_child_to_parent( $course, $lid, $course );
