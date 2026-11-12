@@ -22,9 +22,9 @@ var PRESIN = 'Presin konfirmim';
 var DOSJA_DESHMIVE = 'Dëshmitë e pagesave';
 
 var KOLONAT = ['ID', 'Data', 'Trajneri', 'Klienti', 'Email', 'Telefoni', 'Kursi / oferta', 'Bonus falas shtesë',
-  'Shuma', 'Valuta', 'Mënyra e pagesës', 'Referenca', 'Data e pagesës', 'Pagesën e mori trajneri',
+  'Shuma', 'Valuta', 'Mënyra e pagesës', 'Referenca', 'Data e pagesës', 'Pagesën e mori',
   'Bonusi %', 'Bonusi €', 'Statusi', 'Shënime të trajneres', 'Dëshmia', 'Shënimi im', 'Aktivizuar / vendosur më',
-  'Trajneri ID', 'Paketa ID', 'Kurset ID'];
+  'Trajneri ID', 'Paketa ID', 'Kurset ID', 'Mori ID'];
 var K = {}; // emri → numri i kolonës (1-based)
 KOLONAT.forEach(function (n, i) { K[n] = i + 1; });
 
@@ -69,7 +69,7 @@ function fleta_() {
   sh.getRange('P:P').setNumberFormat('€#,##0.00');
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUSET, true).setAllowInvalid(false).build();
   sh.getRange(2, K['Statusi'], 1999, 1).setDataValidation(rule);
-  sh.hideColumns(K['Trajneri ID'], 3);
+  sh.hideColumns(K['Trajneri ID'], 4);
   sh.setColumnWidth(K['Statusi'], 190);
   sh.setColumnWidth(K['Klienti'], 170);
   return sh;
@@ -156,10 +156,10 @@ function shkruaj_(sh, d) {
   var tvsh = d.tvsh ? Number(d.tvsh) : 18;
   var row = [d.id, d.data || '', d.trajneri || '', d.klienti || '', d.email || '', d.telefoni || '', d.kursi || '',
     d.bonuset || '', Number(d.shuma) || 0, d.valuta || 'EUR', d.pagesa || '', d.referenca || '', d.data_pageses || '',
-    d.mori_trajneri || 'Jo', (Number(d.bonus_pct) || 0) / 100,
+    d.mori || d.mori_trajneri || 'Jo', (Number(d.bonus_pct) || 0) / 100,
     '=ROUND(I' + at + '/' + (1 + tvsh / 100) + '*O' + at + ',2)',
     d.statusi || ST_PRET, d.shenime || '', d.deshmia || '', '', d.aktivizuar || '',
-    d.trajneri_id || '', d.paketa_id || '', d.kurset_id || ''];
+    d.trajneri_id || '', d.paketa_id || '', d.kurset_id || '', d.mori_id || ''];
   if (existing) {
     // Mos e prek "Shënimi im" që e shkruan Mimoza.
     row[K['Shënimi im'] - 1] = sh.getRange(at, K['Shënimi im']).getValue();
@@ -286,14 +286,21 @@ function permbledhja_() {
     var st = String(r[K['Statusi'] - 1]);
     var shuma = Number(r[K['Shuma'] - 1]) || 0;
     var bonus = Number(r[K['Bonusi €'] - 1]) || 0;
-    var mori = String(r[K['Pagesën e mori trajneri'] - 1]) === 'Po';
+    var moriId = String(r[K['Mori ID'] - 1]);
+    // Shitjet e vjetra: "Po" = shitësja e mori paranë dhe e mbajti bonusin. Të reja: Mori ID = anëtarja që i mori paratë.
+    var mori = !moriId && String(r[K['Pagesën e mori'] - 1]) === 'Po';
     var muaji = muaji_(r[K['Data'] - 1]);
-    var t = trainers[tid] || (trainers[tid] = { count: 0, sold: 0, earned: 0, kept: 0, pending_n: 0, pending_c: 0, month_n: 0, month_sold: 0, month_c: 0 });
+    var t = trainers[tid] || (trainers[tid] = { count: 0, sold: 0, earned: 0, kept: 0, received: 0, pending_n: 0, pending_c: 0, month_n: 0, month_sold: 0, month_c: 0 });
     var ok = st === ST_OK;
     var pret = st === ST_PRET || st === ST_KONFIRMO;
     if (ok) {
       t.count++; t.sold += shuma; t.earned += bonus;
       if (mori) { t.kept += bonus; }
+      if (moriId) {
+        // Paratë e plota që mori në dorë (nga klienti) zbriten nga bonusi i saj.
+        var tm = trainers[moriId] || (trainers[moriId] = { count: 0, sold: 0, earned: 0, kept: 0, received: 0, pending_n: 0, pending_c: 0, month_n: 0, month_sold: 0, month_c: 0 });
+        tm.received += shuma;
+      }
       if (months[muaji]) { months[muaji].n++; months[muaji].sold += shuma; months[muaji].bonus += bonus; }
     }
     if (pret) { t.pending_n++; t.pending_c += bonus; pending++; }
@@ -329,6 +336,7 @@ function lista_(tid) {
       bonuset: String(r[K['Bonus falas shtesë'] - 1]),
       shuma: Number(r[K['Shuma'] - 1]) || 0,
       valuta: String(r[K['Valuta'] - 1] || 'EUR'),
+      mori: String(r[K['Pagesën e mori'] - 1]),
       statusi: String(r[K['Statusi'] - 1])
     });
   });
@@ -358,6 +366,7 @@ function pritje_() {
       shuma: Number(r[K['Shuma'] - 1]) || 0,
       valuta: String(r[K['Valuta'] - 1] || 'EUR'),
       pagesa: String(r[K['Mënyra e pagesës'] - 1]),
+      mori: String(r[K['Pagesën e mori'] - 1]),
       referenca: String(r[K['Referenca'] - 1]),
       shenime: String(r[K['Shënime të trajneres'] - 1]),
       paketa_id: r[K['Paketa ID'] - 1],

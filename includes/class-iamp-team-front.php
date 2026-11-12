@@ -269,7 +269,7 @@ class IAMP_Team_Front {
 				'payment_ref'          => $p( 'iamp_ref' ),
 				'payment_date'         => $p( 'iamp_paydate' ),
 				'proof'                => $proof,
-				'collected_by_trainer' => ! empty( $_POST['iamp_collected'] ),
+				'collected_by'         => $p( 'iamp_collected_by' ),
 				'note'                 => isset( $_POST['iamp_note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['iamp_note'] ) ) : '',
 			)
 		);
@@ -347,7 +347,14 @@ class IAMP_Team_Front {
 				<input type="text" name="iamp_ref" placeholder="p.sh. MTCN, kodi Ko-fi, nr. bankar">
 				<label>Foto ose PDF e pagesës</label>
 				<input type="file" name="iamp_proof" accept="image/*,application/pdf">
-				<label class="iamt-check"><input type="checkbox" name="iamp_collected" value="1"> Pagesën e mora unë dhe e mbajta bonusin si provizion</label>
+				<label>Kush e mori pagesën (paratë) *</label>
+				<select name="iamp_collected_by" id="iamp_collected_by" required>
+					<option value="">Zgjidh…</option>
+					<?php foreach ( IAMP_Sales::collector_options() as $val => $label ) : ?>
+						<option value="<?php echo esc_attr( $val ); ?>"><?php echo esc_html( $label ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<div class="iamt-hint">Ko-fi, bankë, PayPal dhe Digistore24 shkojnë te kompania. Për Ria, Western Union, MoneyGram, kesh ose kartelë zgjidh personin që i mori paratë (p.sh. Teuta). Shuma e plotë i zbritet bonusit të asaj personi; bonusi i shitjes mbetet te shitësja.</div>
 
 				<label>Bonus falas shtesë (vetëm nëse klienti merr diçka përtej ofertës)</label>
 				<div class="iamt-courses">
@@ -379,6 +386,14 @@ class IAMP_Team_Front {
 				if (f.value.trim() === '' || f.getAttribute('data-auto') === f.value) {
 					f.value = val; f.setAttribute('data-auto', val);
 				}
+			}
+			// Pagesat online shkojnë te kompania; të tjerat kërkojnë që të zgjidhet personi.
+			var mSel = form.querySelector('[name=iamp_method]'), cSel = document.getElementById('iamp_collected_by');
+			if (mSel && cSel) {
+				mSel.addEventListener('change', function () {
+					var online = /ko-fi|bank|paypal|digistore/i.test(mSel.value);
+					if (online) { cSel.value = 'company'; } else if (cSel.value === 'company' || cSel.value === '') { cSel.value = ''; }
+				});
 			}
 			function lock(on) { btn.disabled = on; btn.style.opacity = on ? '.5' : ''; btn.style.cursor = on ? 'not-allowed' : ''; }
 			function check() {
@@ -466,7 +481,7 @@ class IAMP_Team_Front {
 						<table>
 							<tr><td style="width:170px"><strong>Email</strong></td><td><?php echo esc_html( $r['email'] ); ?><?php echo $r['telefoni'] ? ' · ' . esc_html( $r['telefoni'] ) : ''; ?></td></tr>
 							<tr><td><strong>Kursi / oferta</strong></td><td><?php echo esc_html( $r['kursi'] ); ?><?php echo $r['bonuset'] ? '<span class="iamt-sub">+ ' . esc_html( $r['bonuset'] ) . '</span>' : ''; ?></td></tr>
-							<tr><td><strong>Paguar</strong></td><td><?php echo esc_html( number_format( (float) $r['shuma'], 2, ',', '.' ) . ' ' . $r['valuta'] . ' · ' . $r['pagesa'] ); ?><?php echo $r['referenca'] ? ' · ref. ' . esc_html( $r['referenca'] ) : ''; ?></td></tr>
+							<tr><td><strong>Paguar</strong></td><td><?php echo esc_html( number_format( (float) $r['shuma'], 2, ',', '.' ) . ' ' . $r['valuta'] . ' · ' . $r['pagesa'] ); ?><?php echo ! empty( $r['mori'] ) ? ' · paratë te: ' . esc_html( $r['mori'] ) : ''; ?><?php echo $r['referenca'] ? ' · ref. ' . esc_html( $r['referenca'] ) : ''; ?></td></tr>
 							<tr><td><strong>Trajneri</strong></td><td><?php echo esc_html( $r['trajneri'] ); ?> · <?php echo esc_html( $r['data'] ); ?></td></tr>
 							<?php if ( ! empty( $r['shenime'] ) ) : ?><tr><td><strong>Shënime</strong></td><td><?php echo esc_html( $r['shenime'] ); ?></td></tr><?php endif; ?>
 						</table>
@@ -556,16 +571,20 @@ class IAMP_Team_Front {
 				<div class="iamt-kpi"><span>Shitje këtë muaj</span><strong><?php echo (int) $sum['month_n']; ?></strong></div>
 				<div class="iamt-kpi"><span>Bonus këtë muaj</span><strong><?php echo esc_html( self::eur( $sum['month_c'] ) ); ?></strong></div>
 				<div class="iamt-kpi"><span>Presin konfirmim</span><strong><?php echo (int) $sum['pending_n']; ?></strong></div>
-				<div class="iamt-kpi green"><span>Bonus për të marrë</span><strong><?php echo esc_html( self::eur( $sum['balance'] ) ); ?></strong></div>
+				<div class="iamt-kpi green"><span><?php echo $sum['balance'] < 0 ? 'Për t\'i dorëzuar kompanisë' : 'Bonus për të marrë'; ?></span><strong><?php echo esc_html( self::eur( abs( $sum['balance'] ) ) ); ?></strong></div>
 			</div>
 			<div class="iamt-card">
 				<h3 style="margin-top:0">Llogaria e bonusit</h3>
 				<table>
 					<tr><td>Saldo nga llogaritë e mëparshme</td><td style="text-align:right"><?php echo esc_html( self::eur( $sum['opening'] ) ); ?></td></tr>
 					<tr><td>Bonus nga shitjet e konfirmuara (<?php echo (int) $sum['count']; ?>)</td><td style="text-align:right">+ <?php echo esc_html( self::eur( $sum['earned'] ) ); ?></td></tr>
-					<tr><td>Mbajtur vetë si provizion</td><td style="text-align:right">− <?php echo esc_html( self::eur( $sum['kept'] ) ); ?></td></tr>
+					<tr><td>Para të marra në dorë nga klientët (zbriten plotësisht)</td><td style="text-align:right">− <?php echo esc_html( self::eur( $sum['kept'] ) ); ?></td></tr>
 					<tr><td>Paguar nga IAM Power</td><td style="text-align:right">− <?php echo esc_html( self::eur( $sum['paid'] ) ); ?></td></tr>
+					<?php if ( $sum['balance'] < 0 ) : ?>
+					<tr><td><strong>Për t'i dorëzuar kompanisë</strong></td><td style="text-align:right;color:#b32d2e"><strong><?php echo esc_html( self::eur( -1 * $sum['balance'] ) ); ?></strong></td></tr>
+					<?php else : ?>
 					<tr><td><strong>Për të marrë</strong></td><td style="text-align:right"><strong><?php echo esc_html( self::eur( $sum['balance'] ) ); ?></strong></td></tr>
+					<?php endif; ?>
 				</table>
 			</div>
 			<div class="iamt-card">
