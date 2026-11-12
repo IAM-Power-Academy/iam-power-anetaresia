@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class IAMP_Leads {
 
-	const DB_VERSION = '1.0.0';
+	const DB_VERSION = '1.1.0';
 
 	public static function statuses() {
 		return array(
@@ -68,6 +68,7 @@ class IAMP_Leads {
 			source VARCHAR(190) NOT NULL DEFAULT '',
 			owner_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			status VARCHAR(30) NOT NULL DEFAULT 'pa_kontaktuar',
+			urgent TINYINT(1) NOT NULL DEFAULT 0,
 			last_contact_at DATETIME NULL,
 			next_followup DATE NULL,
 			note TEXT NULL,
@@ -76,6 +77,7 @@ class IAMP_Leads {
 			PRIMARY KEY  (id),
 			KEY owner_id (owner_id),
 			KEY status (status),
+			KEY urgent (urgent),
 			KEY phone_key (phone_key),
 			KEY email (email)
 		) $charset;" );
@@ -247,6 +249,8 @@ class IAMP_Leads {
 				'source'           => sanitize_text_field( isset( $d['source'] ) ? $d['source'] : '' ),
 				'owner_id'         => $owner,
 				'status'           => $status,
+				// Kontakti i ri hyn si URGJENT te trajnerja (importi masiv dërgon 'urgent' => 0).
+				'urgent'           => ( isset( $d['urgent'] ) && ! $d['urgent'] ) || 'pa_kontaktuar' !== $status ? 0 : 1,
 				'last_contact_at'  => ! empty( $d['last_contact'] ) ? $d['last_contact'] : null,
 				'note'             => isset( $d['note'] ) ? sanitize_textarea_field( $d['note'] ) : '',
 				'created_at'       => $now,
@@ -286,7 +290,7 @@ class IAMP_Leads {
 
 	public static function reassign( $lead_id, $new_owner, $actor ) {
 		global $wpdb;
-		$wpdb->update( self::t( 'leads' ), array( 'owner_id' => (int) $new_owner, 'assigned_at' => IAMP_DB::now() ), array( 'id' => (int) $lead_id ) );
+		$wpdb->update( self::t( 'leads' ), array( 'owner_id' => (int) $new_owner, 'assigned_at' => IAMP_DB::now(), 'urgent' => 1 ), array( 'id' => (int) $lead_id ) );
 		self::add_event( $lead_id, $actor, 'assign', null, 'U kalua te ' . IAMP_Sales::trainer_name( $new_owner ) );
 		self::notify_owner( $new_owner, array( (int) $lead_id ) );
 	}
@@ -299,6 +303,7 @@ class IAMP_Leads {
 		}
 		$row = array(
 			'status'          => $status,
+			'urgent'          => 0, // Sapo trajnerja e prek kontaktin, nuk është më urgjent.
 			'last_contact_at' => IAMP_DB::now(),
 			'next_followup'   => preg_match( '/^\d{4}-\d{2}-\d{2}$/', $followup ) ? $followup : null,
 		);
@@ -436,7 +441,7 @@ class IAMP_Leads {
 		$page = (string) get_option( 'iamp_leads_page_url', '' );
 		foreach ( self::stats() as $uid => $s ) {
 			$today = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $t WHERE owner_id = %d AND next_followup = %s AND status NOT IN ('bleu','nuk_interesohet')", $uid, current_time( 'Y-m-d' ) ) ); // phpcs:ignore
-			if ( ! $s['overdue'] && ! $today && ! $s['new'] ) {
+			if ( ! $s['overdue'] && ! $today && ! $s['new'] && ! $s['urgent'] ) {
 				continue;
 			}
 			$user = get_userdata( $uid );
@@ -444,7 +449,7 @@ class IAMP_Leads {
 				continue;
 			}
 			$msg = 'Përshëndetje ' . $s['name'] . ",\n\nKujtesë për sot:\n";
-			$msg .= '• Pa kontaktuar ende: ' . (int) $s['new'] . "\n• Të vonuara: " . (int) $s['overdue'] . "\n• Për t'u rikontaktuar sot: " . $today . "\n";
+			$msg .= ( $s['urgent'] ? '• ⚠ URGJENT (kontakte të reja): ' . (int) $s['urgent'] . "\n" : '' ) . '• Pa kontaktuar ende: ' . (int) $s['new'] . "\n• Të vonuara: " . (int) $s['overdue'] . "\n• Për t'u rikontaktuar sot: " . $today . "\n";
 			$msg .= $page ? "\nHap listën: " . $page : '';
 			wp_mail( $user->user_email, 'IAM Power: kontaktet për sot', $msg . "\n\nEkipi IAM Power" );
 		}
@@ -459,7 +464,7 @@ class IAMP_Leads {
 		}
 		$n    = count( $lead_ids );
 		$page = (string) get_option( 'iamp_leads_page_url', '' );
-		$msg  = 'Përshëndetje ' . IAMP_Sales::trainer_name( $owner_id ) . ",\n\n";
+		$msg  = 'Përshëndetje ' . IAMP_Sales::trainer_name( $owner_id ) . ",\n\n⚠ URGJENT — kontakt i ri që pret përgjigje. Shkruaji sa më shpejt.\n\n";
 		if ( 1 === $n ) {
 			$l    = self::get( (int) $lead_ids[0] );
 			$msg .= 'Të erdhi një kontakt i ri:' . "\n" . ( $l && $l->name ? $l->name : 'pa emër' ) . ( $l && $l->phone ? ' · +' . $l->phone : '' ) . "\n\n";
@@ -467,7 +472,7 @@ class IAMP_Leads {
 			$msg .= "Të erdhën $n kontakte të reja.\n\n";
 		}
 		$msg .= 'Hap listën tënde, shkruaji në WhatsApp me butonin dhe shëno çfarë ka ndodhur' . ( $page ? ":\n" . $page : ' te "Kontaktet e mia" në kursin Skuadra IAM Power.' ) . "\n\nEkipi IAM Power";
-		$subj = 1 === $n ? 'IAM Power: kontakt i ri për ty' : "IAM Power: $n kontakte të reja për ty";
+		$subj = 1 === $n ? 'URGJENT — IAM Power: kontakt i ri për ty' : "URGJENT — IAM Power: $n kontakte të reja për ty";
 		wp_mail( $user->user_email, $subj, $msg );
 	}
 
@@ -478,7 +483,7 @@ class IAMP_Leads {
 		$t   = self::t( 'leads' );
 		$out = array();
 		foreach ( self::trainers() as $uid => $name ) {
-			$out[ $uid ] = array( 'name' => $name, 'total' => 0, 'new' => 0, 'noans' => 0, 'talked' => 0, 'follow' => 0, 'bought' => 0, 'no' => 0, 'overdue' => 0 );
+			$out[ $uid ] = array( 'name' => $name, 'total' => 0, 'new' => 0, 'noans' => 0, 'talked' => 0, 'follow' => 0, 'bought' => 0, 'no' => 0, 'overdue' => 0, 'urgent' => 0 );
 		}
 		$rows = $wpdb->get_results( "SELECT owner_id, status, COUNT(*) c FROM $t GROUP BY owner_id, status" ); // phpcs:ignore
 		$map  = array( 'pa_kontaktuar' => 'new', 'nuk_u_pergjigj' => 'noans', 'foli' => 'talked', 'rikontakto' => 'follow', 'bleu' => 'bought', 'nuk_interesohet' => 'no' );
@@ -489,6 +494,11 @@ class IAMP_Leads {
 			$out[ $r->owner_id ]['total'] += (int) $r->c;
 			if ( isset( $map[ $r->status ] ) ) {
 				$out[ $r->owner_id ][ $map[ $r->status ] ] += (int) $r->c;
+			}
+		}
+		foreach ( $wpdb->get_results( "SELECT owner_id, COUNT(*) c FROM $t WHERE urgent = 1 GROUP BY owner_id" ) as $r ) { // phpcs:ignore
+			if ( isset( $out[ $r->owner_id ] ) ) {
+				$out[ $r->owner_id ]['urgent'] = (int) $r->c;
 			}
 		}
 		$days = (int) IAMP_Settings::get( 'lead_overdue_days' );
@@ -564,6 +574,7 @@ class IAMP_Leads {
 					'status'       => isset( $stat_rev[ $st ] ) ? $stat_rev[ $st ] : 'pa_kontaktuar',
 					'last_contact' => $lc_db,
 					'note'         => $col( $row, 'shënime' ),
+					'urgent'       => 0,
 				),
 				false
 			);
@@ -704,6 +715,11 @@ class IAMP_Leads {
 .iaml-bar a.on{background:#0b1a33;color:#fff;border-color:#0b1a33}
 .iaml-lead{border:1px solid #e6dfcf;border-radius:12px;padding:14px 16px;margin:0 0 12px;background:#fff}
 .iaml-lead.late{border-left:5px solid #c0392b}
+.iaml-lead.urg{border:2px solid #c0392b;background:#fff6f4;border-left-width:8px}
+.iaml-tag.urg{background:#c0392b;color:#fff;font-weight:700;animation:iamlp 1.6s infinite}
+@keyframes iamlp{50%{opacity:.55}}
+.iaml-alert{background:#c0392b;color:#fff;padding:12px 16px;border-radius:10px;margin:0 0 14px;font-weight:600}
+.iaml-alert a{color:#fff;text-decoration:underline}
 .iaml-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center}
 .iaml-top strong{font-size:16px;color:#0b1a33}
 .iaml-meta{color:#6b6657;font-size:13px;margin:2px 0 8px}
@@ -767,10 +783,12 @@ class IAMP_Leads {
 			$where .= " AND status NOT IN ('bleu','nuk_interesohet')";
 		} elseif ( 'vonuar' === $filter ) {
 			$where .= " AND status NOT IN ('bleu','nuk_interesohet')";
+		} elseif ( 'urgjent' === $filter ) {
+			$where .= ' AND urgent = 1';
 		} elseif ( isset( self::statuses()[ $filter ] ) ) {
 			$where .= $wpdb->prepare( ' AND status = %s', $filter );
 		}
-		$rows = $wpdb->get_results( "SELECT * FROM $t WHERE $where ORDER BY ( last_contact_at IS NULL ) DESC, last_contact_at ASC, id ASC LIMIT 600" ); // phpcs:ignore
+		$rows = $wpdb->get_results( "SELECT * FROM $t WHERE $where ORDER BY urgent DESC, IF( urgent = 1, id, 0 ) DESC, ( last_contact_at IS NULL ) DESC, last_contact_at ASC, id ASC LIMIT 600" ); // phpcs:ignore
 		if ( 'vonuar' === $filter ) {
 			$rows = array_values( array_filter( $rows, array( __CLASS__, 'is_late' ) ) );
 		}
@@ -783,6 +801,7 @@ class IAMP_Leads {
 		foreach ( $counts as $c ) {
 			$total += (int) $c->c;
 		}
+		$n_urg = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $t WHERE owner_id = %d AND urgent = 1", $uid ) ); // phpcs:ignore
 		ob_start();
 		echo self::css(); // phpcs:ignore
 		?>
@@ -796,9 +815,12 @@ class IAMP_Leads {
 			<?php endif; ?>
 			<div class="iamt-head"><h2>Kontaktet e mia — <?php echo esc_html( $tname ); ?></h2><p>Shkruaji në WhatsApp, pastaj shëno çfarë ndodhi. Asnjë kontakt nuk humbet.</p></div>
 			<?php echo self::msg(); // phpcs:ignore ?>
+			<?php if ( $n_urg ) : ?>
+				<div class="iaml-alert">⚠ Ke <?php echo (int) $n_urg; ?> kontakt<?php echo 1 === $n_urg ? '' : 'e'; ?> të ri URGJENT — shkruaji sa më shpejt në WhatsApp. <?php if ( 'urgjent' !== $filter ) : ?><a href="<?php echo esc_url( add_query_arg( array_merge( $keep, array( 'statusi' => 'urgjent' ) ), $base ) ); ?>">Shiko vetëm urgjentet</a><?php endif; ?></div>
+			<?php endif; ?>
 			<div class="iaml-bar">
 				<?php
-				$tabs = array( 'hapur' => 'Të hapura', 'vonuar' => 'Të vonuara', 'all' => 'Të gjitha (' . $total . ')' );
+				$tabs = array( 'urgjent' => '🔴 Urgjente (' . $n_urg . ')', 'hapur' => 'Të hapura', 'vonuar' => 'Të vonuara', 'all' => 'Të gjitha (' . $total . ')' );
 				foreach ( self::statuses() as $k => $label ) {
 					$tabs[ $k ] = $label . ( isset( $counts[ $k ] ) ? ' (' . (int) $counts[ $k ]->c . ')' : '' );
 				}
@@ -812,15 +834,17 @@ class IAMP_Leads {
 			<?php endif; ?>
 			<?php foreach ( $rows as $lead ) :
 				$late = self::is_late( $lead );
+				$urg  = ! empty( $lead->urgent );
 				$wa   = self::wa_link( $lead, $tname );
 				$ev   = self::events( $lead->id );
 				$days = $lead->last_contact_at ? floor( ( current_time( 'timestamp' ) - strtotime( $lead->last_contact_at ) ) / DAY_IN_SECONDS ) : null;
 				?>
-				<div class="iaml-lead <?php echo $late ? 'late' : ''; ?>">
+				<div class="iaml-lead <?php echo $urg ? 'urg' : ( $late ? 'late' : '' ); ?>">
 					<div class="iaml-top">
 						<div><strong><?php echo esc_html( $lead->name ? $lead->name : 'Pa emër' ); ?></strong>
 							<span class="iaml-tag"><?php echo esc_html( self::statuses()[ $lead->status ] ?? $lead->status ); ?></span>
-							<?php if ( $late ) : ?><span class="iaml-tag late">Vonuar</span><?php endif; ?>
+							<?php if ( $urg ) : ?><span class="iaml-tag urg">🔴 URGJENT · i ri</span><?php endif; ?>
+							<?php if ( $late && ! $urg ) : ?><span class="iaml-tag late">Vonuar</span><?php endif; ?>
 						</div>
 						<?php if ( $wa ) : ?>
 							<a class="iaml-wa" target="_blank" rel="noopener" href="<?php echo esc_url( $wa ); ?>" data-lead="<?php echo (int) $lead->id; ?>" data-n="<?php echo esc_attr( $nonce ); ?>">💬 WhatsApp</a>
