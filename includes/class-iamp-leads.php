@@ -181,25 +181,35 @@ class IAMP_Leads {
 	}
 
 	/**
-	 * Zgjedh trajneren për një kontakt pa sponsor aktiv: ajo që është më larg
-	 * nga pesha e saj (numri i kontakteve të ndara / pesha është më i vogli).
+	 * Zgjedh trajneren për një kontakt pa sponsor aktiv: ndarje me radhë sipas peshës.
+	 * Çdo trajnere ka një numërues të kontakteve të reja që i janë ndarë me këtë rregull;
+	 * kontakti shkon te ajo me raportin më të vogël numërues/peshë (Teuta dhe Leonora marrin
+	 * më shumë, por kontaktet e reja nuk shkojnë të gjitha te e njëjta trajnere).
+	 * Kontaktet e vjetra (importi) nuk numërohen, që të mos "mbushet" një trajnere e vetme.
 	 */
 	public static function pick_owner() {
-		global $wpdb;
-		$t      = self::t( 'leads' );
+		$counts = get_option( 'iamp_lead_rr', array() );
+		if ( ! is_array( $counts ) ) {
+			$counts = array();
+		}
 		$best   = 0;
 		$best_r = null;
+		$best_w = 0.0;
 		foreach ( self::trainers() as $uid => $tname ) {
 			$w = self::weight_for( $tname );
 			if ( $w <= 0 ) {
 				continue;
 			}
-			$n = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $t WHERE owner_id = %d AND original_sponsor NOT IN ( %s )", $uid, strtolower( trim( $tname ) ) ) ); // phpcs:ignore
-			$r = $n / $w;
-			if ( null === $best_r || $r < $best_r ) {
+			$r = ( isset( $counts[ $uid ] ) ? (int) $counts[ $uid ] : 0 ) / $w;
+			if ( null === $best_r || $r < $best_r - 0.0001 || ( abs( $r - $best_r ) <= 0.0001 && $w > $best_w ) ) {
 				$best_r = $r;
+				$best_w = $w;
 				$best   = (int) $uid;
 			}
+		}
+		if ( $best ) {
+			$counts[ $best ] = ( isset( $counts[ $best ] ) ? (int) $counts[ $best ] : 0 ) + 1;
+			update_option( 'iamp_lead_rr', $counts, false );
 		}
 		return $best;
 	}
