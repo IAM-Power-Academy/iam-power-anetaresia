@@ -226,7 +226,7 @@ class IAMP_Admin_Team {
 		if ( ! $team ) {
 			echo '<p>Shto anëtarët e Skuadrës më poshtë.</p>';
 		} else {
-			echo '<table class="widefat striped iamp-table"><thead><tr><th>Trajneri</th><th>Shitje këtë muaj</th><th>Të konfirmuara</th><th>Saldo e vjetër</th><th>Bonus i fituar</th><th>Mbajtur vetë</th><th>Paguar</th><th>Për të marrë</th><th>Regjistro pagesën</th></tr></thead><tbody>';
+			echo '<table class="widefat striped iamp-table"><thead><tr><th>Trajneri</th><th>Shitje këtë muaj</th><th>Të konfirmuara</th><th>Saldo e vjetër</th><th>Bonus i fituar</th><th>Marrë në dorë</th><th>Paguar</th><th>Për të marrë</th><th>Regjistro pagesën</th></tr></thead><tbody>';
 			$tot = array( 'opening' => 0, 'earned' => 0, 'kept' => 0, 'paid' => 0, 'balance' => 0 );
 			foreach ( $team as $uid => $name ) {
 				$m = IAMP_Sales::summary( $uid );

@@ -100,6 +100,49 @@ class IAMP_Sales {
 		return $n;
 	}
 
+	/** Vlerat e fushës "Kush e mori pagesën" që nuk janë trajnere me llogari bonusi. */
+	public static function collector_extras() {
+		return array(
+			'company' => 'Kompania (Sun and Stars)',
+			'avni'    => 'Avni Thaqi',
+			'mimoza'  => 'Mimoza Thaqi',
+		);
+	}
+
+	/** Zgjedhjet e plota: kompania, Avniu, Mimoza dhe çdo anëtare e Skuadrës (u:ID). */
+	public static function collector_options() {
+		$out   = self::collector_extras();
+		$names = array_map( 'mb_strtolower', array_values( self::team() ) );
+		foreach ( array( 'avni', 'mimoza' ) as $k ) {
+			foreach ( $names as $n ) {
+				if ( false !== mb_strpos( $n, $k ) ) { // Nëse është vetë në Skuadër, del vetëm një herë.
+					unset( $out[ $k ] );
+				}
+			}
+		}
+		foreach ( self::team() as $uid => $name ) {
+			$out[ 'u:' . (int) $uid ] = $name;
+		}
+		return $out;
+	}
+
+	/**
+	 * Kush e mori paranë e klientit.
+	 *
+	 * @return array{label:string,id:int}|WP_Error id > 0 vetëm për anëtare të Skuadrës (paratë zbriten nga bonusi i saj).
+	 */
+	public static function collector( $value, $seller_id = 0 ) {
+		$value = (string) $value;
+		$extra = self::collector_extras();
+		if ( isset( $extra[ $value ] ) ) {
+			return array( 'label' => $extra[ $value ], 'id' => 0 );
+		}
+		if ( preg_match( '/^u:(\d+)$/', $value, $m ) && self::is_team( (int) $m[1] ) ) {
+			return array( 'label' => self::trainer_name( (int) $m[1] ), 'id' => (int) $m[1] );
+		}
+		return new WP_Error( 'iamp_sale', 'Zgjidh kush e mori pagesën (te kompania apo te cila trajnere). Shitja nuk u regjistrua.' );
+	}
+
 	/**
 	 * Regjistron shitjen: dërgohet direkt te Google Sheet. Asgjë nga shitja nuk ruhet në WordPress.
 	 *
@@ -118,6 +161,10 @@ class IAMP_Sales {
 		}
 		if ( ! self::sheet_ready() ) {
 			return new WP_Error( 'iamp_sale', 'Regjistrimi i shitjeve nuk është lidhur ende. Njofto Mimozën.' );
+		}
+		$cb = self::collector( isset( $data['collected_by'] ) ? $data['collected_by'] : '', (int) $data['trainer_id'] );
+		if ( is_wp_error( $cb ) ) {
+			return $cb;
 		}
 		$pct    = (float) $pkg->commission_pct;
 		$extras = array();
@@ -144,7 +191,10 @@ class IAMP_Sales {
 			'pagesa'        => $data['payment_method'],
 			'referenca'     => $data['payment_ref'],
 			'data_pageses'  => $data['payment_date'] ? mysql2date( 'd.m.Y', $data['payment_date'] ) : '',
-			'mori_trajneri' => $data['collected_by_trainer'] ? 'Po' : 'Jo',
+			'mori'          => $cb['label'],
+			'mori_id'       => $cb['id'],
+			// Për kodin e vjetër të fletës: "Po" vetëm kur shitësi vetë e mori pagesën.
+			'mori_trajneri' => $cb['id'] && (int) $cb['id'] === (int) $data['trainer_id'] ? 'Po' : 'Jo',
 			'bonus_pct'     => $pct,
 			'tvsh'          => self::vat(),
 			'statusi'       => 'Pret konfirmim',
@@ -516,7 +566,8 @@ class IAMP_Sales {
 	 * Përmbledhja e bonuseve të një trajneri.
 	 *  earned / kept / shitjet  = nga fleta "Shitjet e Skuadrës 2026"
 	 *  paid / opening          = pagesat e bonuseve që Mimoza regjistron te Skuadra & Bonuset
-	 *  balance                 = opening + earned − kept − paid
+	 *  kept                    = bonusi i mbajtur (shitje të vjetra) + paratë e plota që ka marrë në dorë (received)
+	 *  balance                 = opening + earned − kept − paid  (negative = i ka për t'i dorëzuar kompanisë)
 	 */
 	public static function summary( $trainer_id ) {
 		global $wpdb;
@@ -530,8 +581,10 @@ class IAMP_Sales {
 		$paid    = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $p WHERE trainer_id = %d AND kind = 'payout'", $id ) ); // phpcs:ignore
 		$opening = -1 * (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $p WHERE trainer_id = %d AND kind = 'opening'", $id ) ); // phpcs:ignore
 		$earned  = $g( 'earned' );
-		$kept    = $g( 'kept' );
+		$received = $g( 'received' ); // Paratë e plota që ajo ka marrë në dorë nga klientët (zbriten nga bonusi).
+		$kept     = $g( 'kept' ) + $received;
 		return array(
+			'received'   => $received,
 			'count'      => (int) $g( 'count' ),
 			'sold'       => $g( 'sold' ),
 			'earned'     => $earned,
@@ -557,7 +610,8 @@ class IAMP_Sales {
 		$msg  = 'Shitje e re nga ' . $b['trajneri'] . ":\n\n"
 			. 'Klienti: ' . $b['klienti'] . ' (' . $b['email'] . ")\n"
 			. 'Kursi: ' . $b['kursi'] . "\n"
-			. 'Paguar: ' . number_format( (float) $b['shuma'], 2 ) . ' ' . $b['valuta'] . ' · ' . $b['pagesa'] . "\n\n"
+			. 'Paguar: ' . number_format( (float) $b['shuma'], 2 ) . ' ' . $b['valuta'] . ' · ' . $b['pagesa'] . "\n"
+			. 'Paratë i mori: ' . ( isset( $b['mori'] ) ? $b['mori'] : '—' ) . "\n\n"
 			. 'Konfirmo te fleta "Shitjet e Skuadrës 2026"' . ( $link ? ': ' . $link : ' në Google Drive (CLAUDE SKUADRA).' );
 		wp_mail( $to, 'IAM Power: shitje e re pret konfirmim (' . $b['klienti'] . ')', $msg );
 	}
