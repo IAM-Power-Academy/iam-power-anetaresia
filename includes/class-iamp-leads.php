@@ -17,6 +17,7 @@ class IAMP_Leads {
 	public static function statuses() {
 		return array(
 			'pa_kontaktuar'  => 'Pa kontaktuar',
+			'kontaktuar'     => 'Kontaktuar (pres përgjigje)',
 			'nuk_u_pergjigj' => 'Nuk u përgjigj',
 			'foli'           => 'Foli',
 			'rikontakto'     => 'Rikontakto më vonë',
@@ -40,6 +41,7 @@ class IAMP_Leads {
 		add_shortcode( 'iam_kontakt_i_ri', array( __CLASS__, 'new_form' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'handle_post' ) );
 		add_action( 'wp_ajax_iamp_lead_wa', array( __CLASS__, 'ajax_wa' ) );
+		add_action( 'wp_ajax_iamp_lead_save', array( __CLASS__, 'ajax_save' ) );
 		add_action( 'plugins_loaded', array( __CLASS__, 'maybe_install' ), 20 );
 		add_action( 'iamp_daily_check', array( __CLASS__, 'daily_digest' ), 30 );
 		add_action( 'iamp_membership_activated', array( __CLASS__, 'on_activated' ), 20, 2 );
@@ -496,7 +498,7 @@ class IAMP_Leads {
 			$out[ $uid ] = array( 'name' => $name, 'total' => 0, 'new' => 0, 'noans' => 0, 'talked' => 0, 'follow' => 0, 'bought' => 0, 'no' => 0, 'overdue' => 0, 'urgent' => 0 );
 		}
 		$rows = $wpdb->get_results( "SELECT owner_id, status, COUNT(*) c FROM $t GROUP BY owner_id, status" ); // phpcs:ignore
-		$map  = array( 'pa_kontaktuar' => 'new', 'nuk_u_pergjigj' => 'noans', 'foli' => 'talked', 'rikontakto' => 'follow', 'bleu' => 'bought', 'nuk_interesohet' => 'no' );
+		$map  = array( 'pa_kontaktuar' => 'new', 'nuk_u_pergjigj' => 'noans', 'foli' => 'talked', 'kontaktuar' => 'follow', 'rikontakto' => 'follow', 'bleu' => 'bought', 'nuk_interesohet' => 'no' );
 		foreach ( $rows as $r ) {
 			if ( ! isset( $out[ $r->owner_id ] ) ) {
 				continue;
@@ -692,9 +694,30 @@ class IAMP_Leads {
 		$lead = self::get( isset( $_POST['lead_id'] ) ? absint( $_POST['lead_id'] ) : 0 ); // phpcs:ignore
 		if ( $lead && ( (int) $lead->owner_id === get_current_user_id() || current_user_can( 'manage_options' ) ) ) {
 			self::add_event( $lead->id, get_current_user_id(), 'wa', null, 'U hap WhatsApp' );
+			// Kur hapet WhatsApp te një kontakt i pakontaktuar, regjistrohet vetë si "kontaktuar" me datën e sotme.
+			if ( 'pa_kontaktuar' === $lead->status ) {
+				global $wpdb;
+				$wpdb->update( self::t( 'leads' ), array( 'status' => 'kontaktuar', 'urgent' => 0, 'last_contact_at' => IAMP_DB::now() ), array( 'id' => (int) $lead->id ) );
+				self::add_event( $lead->id, get_current_user_id(), 'contact', 'kontaktuar', 'Shënuar vetë: u hap WhatsApp' );
+			}
 			wp_send_json_success();
 		}
 		wp_send_json_error();
+	}
+
+	/** Ruan menjëherë statusin/datën e rikontaktit sapo ndryshohen në panel (pa pasur nevojë për "Ruaj"). */
+	public static function ajax_save() {
+		if ( ! self::can_use() || ! check_ajax_referer( 'iamp_lead', 'n', false ) ) {
+			wp_send_json_error();
+		}
+		$lead = self::get( isset( $_POST['lead_id'] ) ? absint( $_POST['lead_id'] ) : 0 ); // phpcs:ignore
+		if ( ! $lead || ( (int) $lead->owner_id !== get_current_user_id() && ! current_user_can( 'manage_options' ) ) ) {
+			wp_send_json_error();
+		}
+		$status   = isset( $_POST['status'] ) ? sanitize_key( wp_unslash( $_POST['status'] ) ) : $lead->status; // phpcs:ignore
+		$followup = isset( $_POST['followup'] ) ? sanitize_text_field( wp_unslash( $_POST['followup'] ) ) : ''; // phpcs:ignore
+		self::log_contact( $lead->id, get_current_user_id(), $status, '', $followup );
+		wp_send_json_success( array( 'when' => mysql2date( 'd.m.Y H:i', current_time( 'mysql' ) ) ) );
 	}
 
 	/* ---------------- Faqet ---------------- */
@@ -777,6 +800,13 @@ class IAMP_Leads {
 			return self::css() . $g;
 		}
 		global $wpdb;
+		// Paneli nuk duhet të ruhet në cache, që statusi i ruajtur të shfaqet menjëherë.
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		if ( ! headers_sent() ) {
+			nocache_headers();
+		}
 		$t   = self::t( 'leads' );
 		$uid = get_current_user_id();
 		if ( current_user_can( 'manage_options' ) ) {
@@ -864,11 +894,11 @@ class IAMP_Leads {
 						<?php echo $lead->phone ? '+' . esc_html( $lead->phone ) : 'pa telefon'; ?>
 						<?php echo $lead->email ? ' · ' . esc_html( $lead->email ) : ''; ?>
 						<?php echo $lead->category ? ' · ' . esc_html( $lead->category ) : ''; ?>
-						<?php echo null !== $days ? ' · kontakti i fundit: para ' . (int) $days . ' ditësh' : ' · ende pa kontaktuar'; ?>
+						<span class="iaml-last"><?php echo null !== $days ? ' · kontaktuar më ' . esc_html( mysql2date( 'd.m.Y H:i', $lead->last_contact_at ) ) . ' (para ' . (int) $days . ' ditësh)' : ' · ende pa kontaktuar'; ?></span>
 						<?php echo $lead->next_followup ? ' · rikontakto: ' . esc_html( mysql2date( 'd.m.Y', $lead->next_followup ) ) : ''; ?>
 					</div>
 					<?php if ( $lead->note ) : ?><div class="iaml-meta">📝 <?php echo esc_html( $lead->note ); ?></div><?php endif; ?>
-					<form method="post">
+					<form method="post" class="iaml-contact" data-lead="<?php echo (int) $lead->id; ?>" data-n="<?php echo esc_attr( $nonce ); ?>">
 						<input type="hidden" name="iamp_lead_action" value="contact">
 						<input type="hidden" name="iamp_lead_nonce" value="<?php echo esc_attr( $nonce ); ?>">
 						<?php echo self::back_field(); // phpcs:ignore ?>
@@ -910,6 +940,23 @@ class IAMP_Leads {
 			var fd=new FormData();fd.append('action','iamp_lead_wa');fd.append('lead_id',a.dataset.lead);fd.append('n',a.dataset.n);
 			if(navigator.sendBeacon){navigator.sendBeacon('<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>',fd);}
 		});});
+		// Ruajtje e menjëhershme kur ndryshon statusi ose data (pa pasur nevojë për "Ruaj").
+		document.querySelectorAll('.iaml-contact').forEach(function(f){
+			var note=document.createElement('div');note.style.cssText='grid-column:1/-1;font-size:13px;color:#1e7e34;display:none';f.appendChild(note);
+			function save(){
+				var fd=new FormData();fd.append('action','iamp_lead_save');fd.append('lead_id',f.dataset.lead);fd.append('n',f.dataset.n);
+				fd.append('status',f.querySelector('[name=status]').value);fd.append('followup',f.querySelector('[name=followup]').value);
+				note.style.display='block';note.style.color='#6b6657';note.textContent='Po ruhet…';
+				fetch('<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>',{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+					if(j&&j.success){note.style.color='#1e7e34';note.textContent='✓ U ruajt · '+j.data.when;
+						var l=f.closest('.iaml-lead').querySelector('.iaml-last');if(l){l.textContent=' · kontaktuar më '+j.data.when;}
+						var t=f.closest('.iaml-lead').querySelector('.iaml-tag');var s=f.querySelector('[name=status]');if(t&&s){t.textContent=s.options[s.selectedIndex].text;}
+					}else{note.style.color='#c0392b';note.textContent='⚠ Nuk u ruajt — rifresko faqen dhe provo sërish.';}
+				}).catch(function(){note.style.color='#c0392b';note.textContent='⚠ Nuk u ruajt — kontrollo internetin dhe provo sërish.';});
+			}
+			f.querySelector('[name=status]').addEventListener('change',save);
+			f.querySelector('[name=followup]').addEventListener('change',save);
+		});
 		</script>
 		<?php
 		return ob_get_clean();
