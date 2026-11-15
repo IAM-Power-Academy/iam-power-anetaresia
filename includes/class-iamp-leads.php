@@ -300,10 +300,14 @@ class IAMP_Leads {
 		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE lead_id = %d ORDER BY id DESC LIMIT 100", $lead_id ) ); // phpcs:ignore
 	}
 
-	public static function reassign( $lead_id, $new_owner, $actor ) {
+	public static function reassign( $lead_id, $new_owner, $actor, $note = '' ) {
 		global $wpdb;
 		$wpdb->update( self::t( 'leads' ), array( 'owner_id' => (int) $new_owner, 'assigned_at' => IAMP_DB::now(), 'urgent' => 1 ), array( 'id' => (int) $lead_id ) );
-		self::add_event( $lead_id, $actor, 'assign', null, 'U kalua te ' . IAMP_Sales::trainer_name( $new_owner ) );
+		$text = 'U kalua te ' . IAMP_Sales::trainer_name( $new_owner );
+		if ( '' !== $note ) {
+			$text .= ' — arsyeja: ' . $note;
+		}
+		self::add_event( $lead_id, $actor, 'assign', null, $text );
 		self::notify_owner( $new_owner, array( (int) $lead_id ) );
 	}
 
@@ -665,11 +669,20 @@ class IAMP_Leads {
 			} else {
 				set_transient( 'iamp_lead_msg_' . $uid, array( 'ok', 'U shtuan ' . $res['new'] . ' nga ' . $res['found'] . ' kontakte: ' . implode( ' · ', $res['lines'] ) ), 120 );
 			}
-		} elseif ( 'reassign' === $act && current_user_can( 'manage_options' ) ) {
-			$new = absint( $p( 'owner' ) );
-			if ( $new && isset( self::trainers()[ $new ] ) ) {
-				self::reassign( absint( $p( 'lead_id' ) ), $new, $uid );
-				set_transient( 'iamp_lead_msg_' . $uid, array( 'ok', 'Kontakti u kalua.' ), 120 );
+		} elseif ( 'reassign' === $act ) {
+			// Administratori mund të kalojë çdo kontakt; anëtarja e Skuadrës vetëm kontaktet e veta.
+			$lead = self::get( absint( $p( 'lead_id' ) ) );
+			$new  = absint( $p( 'owner' ) );
+			$note = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : ''; // phpcs:ignore
+			if ( ! $lead || ( (int) $lead->owner_id !== $uid && ! current_user_can( 'manage_options' ) ) ) {
+				set_transient( 'iamp_lead_msg_' . $uid, array( 'err', 'Ky kontakt nuk është i yti.' ), 120 );
+			} elseif ( ! $new || ! isset( self::trainers()[ $new ] ) ) {
+				set_transient( 'iamp_lead_msg_' . $uid, array( 'err', 'Zgjidh te cili anëtar do ta kalosh.' ), 120 );
+			} elseif ( (int) $lead->owner_id === $new ) {
+				set_transient( 'iamp_lead_msg_' . $uid, array( 'err', 'Kontakti është tashmë te ' . IAMP_Sales::trainer_name( $new ) . '.' ), 120 );
+			} else {
+				self::reassign( $lead->id, $new, $uid, $note );
+				set_transient( 'iamp_lead_msg_' . $uid, array( 'ok', 'Kontakti u kalua te ' . IAMP_Sales::trainer_name( $new ) . '.' ), 120 );
 			}
 		}
 		$back = isset( $_POST['iamp_back'] ) ? esc_url_raw( wp_unslash( $_POST['iamp_back'] ) ) : ''; // phpcs:ignore
@@ -912,14 +925,24 @@ class IAMP_Leads {
 						<textarea name="text" placeholder="Çfarë i shkrove / çfarë të ktheu (p.sh. 'e pyeta për Paketën 1, tha do të mendohet')"></textarea>
 						<button type="submit" class="iamt-btn">Ruaj</button>
 					</form>
-					<?php if ( current_user_can( 'manage_options' ) ) : ?>
-					<form method="post" style="grid-template-columns:auto auto">
+					<?php $is_admin = current_user_can( 'manage_options' ); ?>
+					<?php if ( $is_admin || (int) $lead->owner_id === get_current_user_id() ) : ?>
+					<form method="post" class="iaml-reassign" style="grid-template-columns:auto auto">
 						<input type="hidden" name="iamp_lead_action" value="reassign">
 						<input type="hidden" name="iamp_lead_nonce" value="<?php echo esc_attr( $nonce ); ?>">
 						<?php echo self::back_field(); // phpcs:ignore ?>
 						<input type="hidden" name="lead_id" value="<?php echo (int) $lead->id; ?>">
-						<select name="owner"><?php foreach ( self::trainers() as $tid => $tn ) : ?><option value="<?php echo (int) $tid; ?>" <?php selected( (int) $lead->owner_id, (int) $tid ); ?>><?php echo esc_html( $tn ); ?></option><?php endforeach; ?></select>
-						<button type="submit" class="iamt-btn">Kalo te…</button>
+						<select name="owner">
+							<?php if ( ! $is_admin ) : ?><option value="">Kalo te anëtari tjetër…</option><?php endif; ?>
+							<?php foreach ( self::trainers() as $tid => $tn ) :
+								if ( ! $is_admin && (int) $tid === (int) $lead->owner_id ) {
+									continue;
+								} ?>
+								<option value="<?php echo (int) $tid; ?>" <?php echo $is_admin ? selected( (int) $lead->owner_id, (int) $tid, false ) : ''; ?>><?php echo esc_html( $tn ); ?></option>
+							<?php endforeach; ?>
+						</select>
+						<input type="text" name="note" maxlength="200" placeholder="Arsyeja (opsionale)">
+						<button type="submit" class="iamt-btn" <?php echo $is_admin ? '' : 'onclick="return confirm(\'Ta kalosh këtë kontakt te anëtari tjetër? Do të shfaqet te paneli i tij si urgjent.\');"'; ?>>Kalo te…</button>
 					</form>
 					<?php endif; ?>
 					<?php if ( $ev ) : ?>
