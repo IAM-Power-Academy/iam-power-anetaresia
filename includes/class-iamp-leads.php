@@ -942,7 +942,7 @@ class IAMP_Leads {
 							<?php endforeach; ?>
 						</select>
 						<input type="text" name="note" maxlength="200" placeholder="Arsyeja (opsionale)">
-						<button type="submit" class="iamt-btn" <?php echo $is_admin ? '' : 'onclick="return confirm(\'Ta kalosh këtë kontakt te anëtari tjetër? Do t\'i shfaqet te paneli i tij si urgjent.\');"'; ?>>Kalo te…</button>
+						<button type="submit" class="iamt-btn" <?php echo $is_admin ? '' : 'onclick="return confirm(\'Ta kalosh këtë kontakt te anëtari tjetër? Do të shfaqet te paneli i tij si urgjent.\');"'; ?>>Kalo te…</button>
 					</form>
 					<?php endif; ?>
 					<?php if ( $ev ) : ?>
