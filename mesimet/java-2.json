@@ -1,6 +1,5 @@
 {
-  "approved": false,
-  "_shenim": "Vendos \"approved\": true vetëm pasi Mimoza ta miratojë ('postoji'). Skedari lexohet nga plugin-i çdo orë.",
+  "approved": true,
   "lessons": [
     {
       "id": "j2-d8",
