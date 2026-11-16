@@ -38,6 +38,7 @@ require_once IAMP_DIR . 'includes/class-iamp-team-front.php';
 require_once IAMP_DIR . 'includes/class-iamp-admin-team.php';
 require_once IAMP_DIR . 'includes/class-iamp-app.php';
 require_once IAMP_DIR . 'includes/class-iamp-mesimi.php';
+require_once IAMP_DIR . 'includes/class-iamp-mesimi-import.php';
 require_once IAMP_DIR . 'includes/class-iamp-leads.php';
 require_once IAMP_DIR . 'includes/class-iamp-deact.php';
 require_once IAMP_DIR . 'includes/class-iamp-admin-leads.php';
@@ -80,6 +81,7 @@ add_action( 'plugins_loaded', function () {
 	IAMP_Sales::init();
 	IAMP_App::init();
 	IAMP_Mesimi::init();
+	IAMP_Mesimi_Import::init();
 	IAMP_Leads::init();
 	IAMP_Deact::init();
 
