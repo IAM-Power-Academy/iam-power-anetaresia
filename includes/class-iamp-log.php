@@ -71,6 +71,7 @@ class IAMP_Log {
 			'team'            => 'Skuadra',
 			'lead_contact'    => 'Kontakt i regjistruar',
 			'lead_import'     => 'Import kontaktesh',
+			'mesimi_import'   => 'Mësime nga GitHub',
 		);
 		return isset( $labels[ $action ] ) ? $labels[ $action ] : $action;
 	}
