@@ -48,6 +48,7 @@ class IAMP_Mesimi_Import {
 		}
 		$res = wp_remote_get( $url, array( 'timeout' => 20, 'headers' => $h ) );
 		if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+			update_option( 'iamp_mesim_error', is_wp_error( $res ) ? $res->get_error_message() : 'GitHub ktheu HTTP ' . (int) wp_remote_retrieve_response_code( $res ) . ' për ' . $path, false );
 			return null;
 		}
 		return wp_remote_retrieve_body( $res );
@@ -63,6 +64,7 @@ class IAMP_Mesimi_Import {
 			return 0;
 		}
 		set_transient( 'iamp_mesim_lock', 1, 5 * MINUTE_IN_SECONDS );
+		delete_option( 'iamp_mesim_error' );
 
 		$list = self::get( self::FOLDER, true );
 		$list = $list ? json_decode( $list, true ) : null;
@@ -90,6 +92,7 @@ class IAMP_Mesimi_Import {
 				}
 			}
 		}
+		delete_transient( 'iamp_mesim_lock' );
 		if ( $created ) {
 			IAMP_Log::add( 'mesimi_import', 0, $created . ' mësime të reja nga GitHub.' );
 		}

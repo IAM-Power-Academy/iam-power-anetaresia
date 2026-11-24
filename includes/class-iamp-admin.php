@@ -587,8 +587,8 @@ class IAMP_Admin {
 				</form>
 			</div>
 			<div class="iamp-card">
-				<h2>Kontrolli i skadimeve</h2>
-				<p>Kontrolli bëhet automatikisht çdo orë. Mund ta nisësh edhe tani.</p>
+				<h2>Kontrolli i skadimeve dhe Mësimi i Ditës</h2>
+				<p>Kontrolli bëhet automatikisht çdo orë (skadimet + mësimet e reja nga GitHub). Mund ta nisësh edhe tani.</p>
 				<?php self::form_open( 'iamp_run_cron' ); ?>
 				<button class="button">Kontrollo tani</button>
 				</form>
@@ -1015,7 +1015,13 @@ class IAMP_Admin {
 
 	private static function do_run_cron() {
 		IAMP_Cron::run();
-		self::back( 'iamp-settings', 'Kontrolli i skadimeve u krye.' );
+		delete_transient( 'iamp_mesim_lock' );
+		$n   = IAMP_Mesimi_Import::run();
+		$err = get_option( 'iamp_mesim_error' );
+		if ( $err ) {
+			self::back( 'iamp-settings', 'Kontrolli i skadimeve u krye, por mësimet e ditës nuk u lexuan: ' . esc_html( $err ), 'error' );
+		}
+		self::back( 'iamp-settings', 'Kontrolli i skadimeve u krye. Mësime të reja nga GitHub: ' . (int) $n . '.' );
 	}
 
 	private static function do_sec_deactivate() {
